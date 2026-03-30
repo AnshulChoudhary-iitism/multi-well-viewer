@@ -6,9 +6,15 @@ formation top is aligned at a common datum (zero offset by default).
 """
 
 import copy
+import re
 import numpy as np
 import pandas as pd
 from typing import Optional
+
+
+def _normalize_well_name(name: str) -> str:
+    """Return a canonical key for matching well names across files."""
+    return re.sub(r"[^a-z0-9]+", "", str(name).strip().lower())
 
 
 def flatten_wells(
@@ -49,13 +55,13 @@ def flatten_wells(
         ``"shift"`` records the applied offset.
     """
     # Build lookup: well_name → depth of reference formation
-    ref_tops = (
-        formation_tops[
-            formation_tops["formation"].str.strip() == reference_formation.strip()
-        ]
-        .set_index("well")["depth"]
-        .to_dict()
-    )
+    ref_rows = formation_tops[
+        formation_tops["formation"].str.strip() == reference_formation.strip()
+    ]
+    ref_tops = {
+        _normalize_well_name(row["well"]): float(row["depth"])
+        for _, row in ref_rows.iterrows()
+    }
 
     flattened = {}
     for well_name, well_data in wells.items():
@@ -63,13 +69,7 @@ def flatten_wells(
         df = flat_data["df"].copy()
         depth_col = df.columns[0]
 
-        # Try exact match first, then case-insensitive
-        top_depth = ref_tops.get(well_name)
-        if top_depth is None:
-            for key, val in ref_tops.items():
-                if key.strip().lower() == well_name.strip().lower():
-                    top_depth = val
-                    break
+        top_depth = ref_tops.get(_normalize_well_name(well_name))
 
         if top_depth is not None:
             shift = reference_depth - float(top_depth)
@@ -112,24 +112,19 @@ def flatten_formation_tops(
     pd.DataFrame
         Copy of *formation_tops* with adjusted ``depth`` values.
     """
-    ref_tops = (
-        formation_tops[
-            formation_tops["formation"].str.strip() == reference_formation.strip()
-        ]
-        .set_index("well")["depth"]
-        .to_dict()
-    )
+    ref_rows = formation_tops[
+        formation_tops["formation"].str.strip() == reference_formation.strip()
+    ]
+    ref_tops = {
+        _normalize_well_name(row["well"]): float(row["depth"])
+        for _, row in ref_rows.iterrows()
+    }
 
     flat_tops = formation_tops.copy()
     shifts = {}
 
     for well_name in formation_tops["well"].unique():
-        top_depth = ref_tops.get(well_name)
-        if top_depth is None:
-            for key, val in ref_tops.items():
-                if key.strip().lower() == well_name.strip().lower():
-                    top_depth = val
-                    break
+        top_depth = ref_tops.get(_normalize_well_name(well_name))
         if top_depth is not None:
             shifts[well_name] = reference_depth - float(top_depth)
         else:

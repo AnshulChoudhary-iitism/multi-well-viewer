@@ -6,3 +6,5 @@ plotly>=5.15.0
 lasio>=0.31
 scipy>=1.11.0
 kaleido>=0.2.1
+openpyxl>=3.1.0
+xlrd>=2.0.1

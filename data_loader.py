@@ -4,6 +4,7 @@ Handles LAS file parsing, CSV formation tops import, and data validation.
 """
 
 import io
+import re
 import warnings
 from typing import Optional
 
@@ -101,12 +102,70 @@ def _extract_well_name(las: lasio.LASFile, filename: str) -> str:
 
 REQUIRED_TOPS_COLS = {"well", "formation", "depth"}
 
+TOPS_COLUMN_ALIASES = {
+    "well": [
+        "well",
+        "well name",
+        "well id",
+        "borehole name",
+        "borehole id",
+        "borehole",
+    ],
+    "formation": [
+        "formation",
+        "formation name",
+        "horizon",
+        "marker",
+        "top name",
+    ],
+    "depth": [
+        "depth",
+        "top depth",
+        "top depth (m)",
+        "top depth m",
+        "topdepth",
+    ],
+    "base_depth": [
+        "base depth",
+        "base depth (m)",
+        "base depth m",
+        "basedepth",
+    ],
+    "color": [
+        "color",
+        "colour",
+        "formation color",
+        "formation colour",
+    ],
+}
+
+
+def _normalize_col_name(name: str) -> str:
+    """Normalise column names for robust alias matching."""
+    return re.sub(r"[^a-z0-9]+", " ", str(name).strip().lower()).strip()
+
+
+def _resolve_tops_columns(df: pd.DataFrame) -> dict:
+    """Resolve canonical tops columns from known aliases."""
+    resolved = {}
+    for canonical, aliases in TOPS_COLUMN_ALIASES.items():
+        for alias in aliases:
+            candidate = _normalize_col_name(alias)
+            if candidate in df.columns:
+                resolved[canonical] = candidate
+                break
+    return resolved
+
 
 def load_formation_tops(uploaded_file) -> Optional[pd.DataFrame]:
-    """Parse a CSV file of formation tops.
+    """Parse a formation tops file (CSV or Excel).
 
-    Expected CSV columns (case-insensitive):
+    Expected columns (case-insensitive):
         well, formation, depth
+
+    Also supports common alternatives such as:
+        borehole name / borehole id, formation name,
+        top depth (m), base depth (m)
 
     An optional ``color`` column may be included.
 
@@ -119,29 +178,68 @@ def load_formation_tops(uploaded_file) -> Optional[pd.DataFrame]:
     """
     try:
         raw_bytes = uploaded_file.read()
-        df = pd.read_csv(io.BytesIO(raw_bytes))
+        filename = str(getattr(uploaded_file, "name", "")).lower()
+
+        if filename.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(io.BytesIO(raw_bytes))
+        else:
+            df = pd.read_csv(io.BytesIO(raw_bytes))
     except Exception as exc:
-        warnings.warn(f"Could not parse formation tops CSV: {exc}")
+        warnings.warn(f"Could not parse formation tops file: {exc}")
         return None
 
-    df.columns = [c.strip().lower() for c in df.columns]
+    df.columns = [_normalize_col_name(c) for c in df.columns]
 
-    missing = REQUIRED_TOPS_COLS - set(df.columns)
+    resolved = _resolve_tops_columns(df)
+
+    # If top depth is not provided, allow base depth as a fallback depth.
+    if "depth" not in resolved and "base_depth" in resolved:
+        resolved["depth"] = resolved["base_depth"]
+
+    missing = REQUIRED_TOPS_COLS - set(resolved.keys())
     if missing:
-        warnings.warn(f"Formation tops CSV missing columns: {missing}")
+        warnings.warn(
+            "Formation tops file missing required fields after alias mapping: "
+            f"{missing}"
+        )
         return None
 
-    if "color" not in df.columns:
-        formations = df["formation"].unique()
+    std_df = pd.DataFrame(
+        {
+            "well": df[resolved["well"]],
+            "formation": df[resolved["formation"]],
+            "depth": df[resolved["depth"]],
+        }
+    )
+
+    # If an alternate well identifier exists (e.g., Borehole Id), include it
+    # as additional rows so tops can match LAS well names in either format.
+    alternate_well_cols = [c for c in ["borehole id", "well id"] if c in df.columns]
+    for alt_col in alternate_well_cols:
+        if alt_col != resolved["well"]:
+            alt_df = std_df.copy()
+            alt_df["well"] = df[alt_col]
+            std_df = pd.concat([std_df, alt_df], ignore_index=True)
+
+    if "color" in resolved:
+        std_df["color"] = df[resolved["color"]]
+
+    if "color" not in std_df.columns:
+        formations = std_df["formation"].astype(str).str.strip().unique()
         color_cycle = _default_colors(len(formations))
         color_map = {f: color_cycle[i] for i, f in enumerate(formations)}
-        df["color"] = df["formation"].map(color_map)
+        std_df["color"] = std_df["formation"].astype(str).str.strip().map(color_map)
 
-    df["depth"] = pd.to_numeric(df["depth"], errors="coerce")
-    df.dropna(subset=["depth"], inplace=True)
-    df.reset_index(drop=True, inplace=True)
+    std_df["well"] = std_df["well"].astype(str).str.strip()
+    std_df["formation"] = std_df["formation"].astype(str).str.strip()
+    std_df["depth"] = pd.to_numeric(std_df["depth"], errors="coerce")
 
-    return df[["well", "formation", "depth", "color"]]
+    std_df.replace({"well": {"": np.nan}, "formation": {"": np.nan}}, inplace=True)
+    std_df.dropna(subset=["well", "formation", "depth"], inplace=True)
+    std_df.drop_duplicates(subset=["well", "formation", "depth"], inplace=True)
+    std_df.reset_index(drop=True, inplace=True)
+
+    return std_df[["well", "formation", "depth", "color"]]
 
 
 def _default_colors(n: int) -> list:
