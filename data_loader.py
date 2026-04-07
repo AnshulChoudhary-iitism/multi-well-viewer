@@ -13,6 +13,19 @@ import numpy as np
 import pandas as pd
 
 
+def _read_uploaded_bytes(uploaded_file) -> bytes:
+    """Safely read all bytes from an uploaded file-like object."""
+    if hasattr(uploaded_file, "getvalue"):
+        data = uploaded_file.getvalue()
+        if isinstance(data, (bytes, bytearray)):
+            return bytes(data)
+
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+    data = uploaded_file.read()
+    return bytes(data) if isinstance(data, (bytes, bytearray)) else b""
+
+
 # ---------------------------------------------------------------------------
 # LAS file loading
 # ---------------------------------------------------------------------------
@@ -39,7 +52,10 @@ def load_las_file(uploaded_file) -> Optional[dict]:
         Returns ``None`` on failure.
     """
     try:
-        raw_bytes = uploaded_file.read()
+        raw_bytes = _read_uploaded_bytes(uploaded_file)
+        if not raw_bytes:
+            warnings.warn("LAS file is empty or could not be read.")
+            return None
         las = lasio.read(io.StringIO(raw_bytes.decode("utf-8", errors="replace")))
     except Exception as exc:
         warnings.warn(f"Could not parse LAS file: {exc}")
@@ -177,7 +193,10 @@ def load_formation_tops(uploaded_file) -> Optional[pd.DataFrame]:
         Returns ``None`` if parsing fails.
     """
     try:
-        raw_bytes = uploaded_file.read()
+        raw_bytes = _read_uploaded_bytes(uploaded_file)
+        if not raw_bytes:
+            warnings.warn("Formation tops file is empty or could not be read.")
+            return None
         filename = str(getattr(uploaded_file, "name", "")).lower()
 
         if filename.endswith((".xlsx", ".xls")):

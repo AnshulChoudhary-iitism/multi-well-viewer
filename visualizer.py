@@ -14,6 +14,7 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.patches import ConnectionPatch
 import numpy as np
 import pandas as pd
 
@@ -38,6 +39,30 @@ CURVE_STYLES: dict[str, dict] = {
 }
 
 _DEFAULT_STYLE = {"color": "#546e7a", "lw": 1.0, "fill": False}
+
+THEME_PRESETS: dict[str, dict[str, str]] = {
+    "Geo Light": {
+        "facecolor": "#ffffff",
+        "grid_major": "#c9d5d2",
+        "grid_minor": "#e6edeb",
+        "separator": "#97aaa6",
+        "connector": "#566a68",
+    },
+    "Mono Print": {
+        "facecolor": "#ffffff",
+        "grid_major": "#b0b0b0",
+        "grid_minor": "#dfdfdf",
+        "separator": "#8b8b8b",
+        "connector": "#676767",
+    },
+    "Earth Warm": {
+        "facecolor": "#fffdf8",
+        "grid_major": "#d8cec0",
+        "grid_minor": "#efe6da",
+        "separator": "#b6aa9b",
+        "connector": "#8d7660",
+    },
+}
 
 
 def _get_style(curve_name: str) -> dict:
@@ -70,6 +95,13 @@ def plot_cross_section(
     figsize_per_well: tuple[float, float] = (3.0, 9.0),
     depth_label: str = "Depth (m)",
     title: str = "Multi-Well Display",
+    font_scale: float = 1.0,
+    line_thickness_scale: float = 1.0,
+    theme_preset: str = "Geo Light",
+    show_connectors: bool = False,
+    connector_formations: Optional[list[str]] = None,
+    depth_grid_style: str = "Major",
+    track_separators: bool = True,
 ) -> plt.Figure:
     """Build and return a matplotlib Figure showing a multi-well cross-section.
 
@@ -99,6 +131,21 @@ def plot_cross_section(
         Label for the Y-axis.
     title : str
         Figure title.
+    font_scale : float
+        Global font scaling factor for publication output.
+    line_thickness_scale : float
+        Multiplier for all curve and overlay line widths.
+    theme_preset : str
+        One of ``Geo Light``, ``Mono Print`` or ``Earth Warm``.
+    show_connectors : bool
+        Whether to draw connectors between the same marker top across wells.
+    connector_formations : list[str] or None
+        Specific formations to connect. If ``None`` or empty, all common tops
+        between neighboring wells are connected.
+    depth_grid_style : str
+        Depth grid mode: ``None``, ``Major`` or ``Major + Minor``.
+    track_separators : bool
+        Whether to draw visible separators at well boundaries.
 
     Returns
     -------
@@ -124,11 +171,24 @@ def plot_cross_section(
     if n_cols == 1:
         axes = [axes]
 
-    fig.suptitle(title, fontsize=15, fontweight="bold", y=1.01)
+    theme = THEME_PRESETS.get(theme_preset, THEME_PRESETS["Geo Light"])
+    fig.patch.set_facecolor(theme["facecolor"])
+
+    title_fs = max(11, int(round(15 * font_scale)))
+    track_title_fs = max(8, int(round(10 * font_scale)))
+    axis_label_fs = max(9, int(round(11 * font_scale)))
+    tick_fs = max(7, int(round(9 * font_scale)))
+    formation_label_fs = max(7, int(round(8 * font_scale)))
+
+    fig.suptitle(title, fontsize=title_fs, fontweight="bold", y=1.01)
 
     well_names = list(wells.keys())
     tops_colors: dict[str, str] = {}
     tops_for_plot = formation_tops
+    marker_depths_by_well: dict[str, dict[str, float]] = {}
+    selected_connector_formations = {
+        str(f).strip() for f in (connector_formations or []) if str(f).strip()
+    }
     if formation_tops is not None and not formation_tops.empty:
         tops_for_plot = formation_tops.copy()
         tops_for_plot["_well_key"] = tops_for_plot["well"].map(_normalize_well_name)
@@ -152,6 +212,13 @@ def plot_cross_section(
                 well_tops["depth"] = pd.to_numeric(well_tops["depth"], errors="coerce")
                 well_tops = well_tops.dropna(subset=["depth"]).sort_values("depth")
 
+                # Keep one depth per formation for optional connector overlays.
+                dedup_tops = well_tops.drop_duplicates(subset=["formation"], keep="first")
+                marker_depths_by_well[well_name] = {
+                    str(row["formation"]): float(row["depth"])
+                    for _, row in dedup_tops.iterrows()
+                }
+
                 if shade_formations and len(well_tops) > 1:
                     top_rows = well_tops[["depth", "color"]].to_dict("records")
                     for idx in range(len(top_rows) - 1):
@@ -174,6 +241,29 @@ def plot_cross_section(
 
             style = _get_style(curve)
             use_log = style.get("log_scale", False)
+            lw = float(style.get("lw", 1.0)) * float(line_thickness_scale)
+
+            ax.set_facecolor(theme["facecolor"])
+
+            if depth_grid_style != "None":
+                ax.grid(
+                    axis="y",
+                    which="major",
+                    linestyle="--",
+                    linewidth=0.7,
+                    color=theme["grid_major"],
+                    alpha=0.85,
+                )
+                if depth_grid_style == "Major + Minor":
+                    ax.minorticks_on()
+                    ax.grid(
+                        axis="y",
+                        which="minor",
+                        linestyle=":",
+                        linewidth=0.5,
+                        color=theme["grid_minor"],
+                        alpha=0.8,
+                    )
 
             if curve in df_win.columns:
                 vals = df_win[curve].values.astype(float)
@@ -195,13 +285,13 @@ def plot_cross_section(
                             np.where(pos, vals, np.nan),
                             depth,
                             color=style["color"],
-                            linewidth=style["lw"],
+                            linewidth=lw,
                         )
                     else:
                         ax.plot(
                             vals, depth,
                             color=style["color"],
-                            linewidth=style["lw"],
+                            linewidth=lw,
                         )
                         if style.get("fill"):
                             ax.fill_betweenx(
@@ -225,7 +315,7 @@ def plot_cross_section(
                         ax.axhline(
                             td,
                             color=top_row["color"],
-                            linewidth=1.5,
+                            linewidth=1.5 * float(line_thickness_scale),
                             linestyle="--",
                             zorder=3,
                         )
@@ -235,7 +325,7 @@ def plot_cross_section(
                                 x_left if x_left != 0 else 0,
                                 td,
                                 f" {top_row['formation']}",
-                                fontsize=8,
+                                fontsize=formation_label_fs,
                                 va="bottom",
                                 color=top_row["color"],
                                 clip_on=True,
@@ -246,16 +336,59 @@ def plot_cross_section(
             header = f"{curve}"
             if unit:
                 header += f"\n({unit})"
-            ax.set_title(header, fontsize=10, pad=4)
-            ax.tick_params(axis="x", labelsize=9, rotation=45)
-            ax.tick_params(axis="y", labelsize=9)
+            ax.set_title(header, fontsize=track_title_fs, pad=4)
+            ax.tick_params(axis="x", labelsize=tick_fs, rotation=45)
+            ax.tick_params(axis="y", labelsize=tick_fs)
             ax.invert_yaxis()
 
+            if track_separators and ci == 0 and wi > 0:
+                ax.spines["left"].set_visible(True)
+                ax.spines["left"].set_color(theme["separator"])
+                ax.spines["left"].set_linewidth(1.8)
+
             if col_idx == 0:
-                ax.set_ylabel(depth_label, fontsize=11)
+                ax.set_ylabel(depth_label, fontsize=axis_label_fs)
 
             if ci == 0:
-                ax.set_xlabel(well_name, fontsize=10, labelpad=4)
+                ax.set_xlabel(well_name, fontsize=track_title_fs, labelpad=4)
+
+    # Optional cross-well connector lines for selected/common formation tops.
+    if show_connectors and n_wells > 1 and marker_depths_by_well:
+        for wi in range(n_wells - 1):
+            left_well = well_names[wi]
+            right_well = well_names[wi + 1]
+            left_tops = marker_depths_by_well.get(left_well, {})
+            right_tops = marker_depths_by_well.get(right_well, {})
+            if not left_tops or not right_tops:
+                continue
+
+            common_forms = set(left_tops.keys()) & set(right_tops.keys())
+            if selected_connector_formations:
+                common_forms = common_forms & selected_connector_formations
+            if not common_forms:
+                continue
+
+            left_ax = axes[wi * n_curves]
+            right_ax = axes[(wi + 1) * n_curves]
+
+            for formation in sorted(common_forms):
+                y_left = float(left_tops[formation])
+                y_right = float(right_tops[formation])
+                if not (depth_min <= y_left <= depth_max and depth_min <= y_right <= depth_max):
+                    continue
+
+                connector_color = tops_colors.get(formation, theme["connector"])
+                connector = ConnectionPatch(
+                    xyA=(1.0, y_left),
+                    coordsA=left_ax.get_yaxis_transform(),
+                    xyB=(0.0, y_right),
+                    coordsB=right_ax.get_yaxis_transform(),
+                    color=connector_color,
+                    linewidth=max(0.8, 1.2 * float(line_thickness_scale)),
+                    alpha=0.65,
+                    zorder=2,
+                )
+                fig.add_artist(connector)
 
     # Legend for formation tops
     if show_tops and tops_colors:
@@ -267,7 +400,7 @@ def plot_cross_section(
             handles=patches,
             loc="lower center",
             ncol=min(len(patches), 6),
-            fontsize=9,
+            fontsize=max(8, int(round(9 * font_scale))),
             title="Formation Tops",
             bbox_to_anchor=(0.5, -0.04),
         )

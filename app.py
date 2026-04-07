@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import hashlib
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,7 +22,6 @@ from data_loader import (
     get_common_curves,
     load_formation_tops,
     load_las_file,
-    validate_wells,
 )
 from flattening import (
     flatten_formation_tops,
@@ -56,34 +56,216 @@ st.set_page_config(
 st.markdown(
     """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg-main-1: #f8f5ee;
+    --bg-main-2: #eef3f1;
+    --panel: #ffffff;
+    --panel-soft: #f4f7f6;
+    --text-main: #223233;
+    --text-muted: #536867;
+    --accent: #0d6b64;
+    --accent-soft: #dff2ef;
+    --line: #d5dfdc;
+    --shadow: 0 12px 32px rgba(27, 54, 52, 0.10);
+}
+
 html, body, [class*="css"] {
-    font-family: "Times New Roman", Times, serif;
+    font-family: "Source Sans 3", "Segoe UI", sans-serif;
+    color: var(--text-main);
 }
 
 .stApp {
-    background-color: #ffffff;
+    background:
+        radial-gradient(1300px 420px at -10% -8%, #ffffff 0%, rgba(255,255,255,0) 60%),
+        radial-gradient(900px 360px at 110% -5%, #edf6f4 0%, rgba(237,246,244,0) 55%),
+        linear-gradient(165deg, var(--bg-main-1) 0%, var(--bg-main-2) 100%);
+}
+
+[data-testid="stAppViewContainer"] > .main {
+    animation: pageFade 0.45s ease-out;
+}
+
+@keyframes pageFade {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 [data-testid="stSidebar"] {
-    background-color: #f5f7fb;
+    background: linear-gradient(180deg, #f4f6f3 0%, #ecf1ef 100%);
+    border-right: 1px solid var(--line);
 }
 
-h1 { font-size: 2.0rem !important; }
+[data-testid="stSidebar"] .stMarkdown h1,
+[data-testid="stSidebar"] .stMarkdown h2,
+[data-testid="stSidebar"] .stMarkdown h3,
+h1, h2, h3 {
+    font-family: "Fraunces", Georgia, serif !important;
+    letter-spacing: 0.2px;
+    color: #1f3230;
+}
+
+h1 { font-size: 2.1rem !important; }
 h2 { font-size: 1.45rem !important; }
-h3 { font-size: 1.2rem !important; }
+h3 { font-size: 1.17rem !important; }
 
 p, li, label, .stMarkdown, .stAlert, .stCaption {
-    font-size: 1.05rem !important;
+    font-size: 1.03rem !important;
+}
+
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0.45rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fbfcfc;
+    color: var(--text-muted);
+    padding: 0.4rem 0.9rem;
+}
+
+.stTabs [aria-selected="true"] {
+    background: var(--accent-soft) !important;
+    border-color: #9cc9c3 !important;
+    color: #144e4a !important;
+    font-weight: 700;
+}
+
+div[data-testid="stMetric"] {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 0.75rem 0.85rem;
+    box-shadow: var(--shadow);
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.45rem !important;
+    font-weight: 700 !important;
+    color: #184946;
+}
+
+div[data-testid="stExpander"] {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 8px 22px rgba(30, 56, 55, 0.06);
+}
+
+div[data-testid="stExpander"] > details summary {
+    font-weight: 600;
 }
 
 .stButton > button,
 .stDownloadButton > button {
-    border-radius: 8px;
-    font-weight: 600;
+    border-radius: 10px;
+    border: 1px solid #9dc9c4;
+    background: linear-gradient(180deg, #1f8a82 0%, #0f6f68 100%);
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: 0 8px 18px rgba(17, 91, 85, 0.25);
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
-[data-testid="stMetricValue"] {
-    font-size: 1.3rem !important;
+.stButton > button:hover,
+.stDownloadButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 22px rgba(17, 91, 85, 0.30);
+}
+
+.stSelectbox, .stMultiSelect, .stSlider, .stRadio, .stCheckbox, .stNumberInput {
+    background: rgba(255,255,255,0.56);
+    border-radius: 10px;
+    padding: 0.1rem 0.35rem;
+}
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.hero-card {
+    border: 1px solid #c9d9d6;
+    border-radius: 16px;
+    padding: 1.1rem 1.2rem 1rem;
+    background:
+        linear-gradient(110deg, rgba(255,255,255,0.95) 0%, rgba(247,252,251,0.90) 55%, rgba(238,248,246,0.95) 100%);
+    box-shadow: var(--shadow);
+    margin-bottom: 0.65rem;
+}
+
+.hero-kicker {
+    display: inline-block;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #11615c;
+    background: #e0f3f0;
+    border: 1px solid #b8ddd7;
+    border-radius: 999px;
+    padding: 0.22rem 0.58rem;
+    margin-bottom: 0.55rem;
+}
+
+.hero-title {
+    font-family: "Fraunces", Georgia, serif;
+    margin: 0;
+    color: #1e3735;
+    font-size: 1.65rem;
+    line-height: 1.2;
+}
+
+.hero-sub {
+    margin-top: 0.45rem;
+    margin-bottom: 0;
+    color: var(--text-muted);
+}
+
+.wf-stepper {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.1rem 0 0.9rem;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+}
+
+.wf-chip {
+    border: 1px solid #cad8d5;
+    border-radius: 999px;
+    padding: 0.26rem 0.65rem;
+    font-size: 0.86rem;
+    white-space: nowrap;
+    background: #ffffff;
+    color: #55706f;
+}
+
+.wf-chip.done {
+    border-color: #9ccdc7;
+    background: #e6f7f4;
+    color: #165d57;
+    font-weight: 700;
+}
+
+.wf-chip.active {
+    border-color: #b1c8c4;
+    background: #f4faf9;
+    color: #234948;
+    font-weight: 700;
+}
+
+.wf-arrow {
+    color: #78928f;
+    font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+    h1 { font-size: 1.7rem !important; }
+    .hero-title { font-size: 1.34rem; }
 }
 </style>
 """,
@@ -99,6 +281,18 @@ if "wells" not in st.session_state:
 
 if "formation_tops" not in st.session_state:
     st.session_state.formation_tops = None
+
+if "formation_tops_upload_sig" not in st.session_state:
+    st.session_state.formation_tops_upload_sig = None
+
+if "formation_tops_upload_name" not in st.session_state:
+    st.session_state.formation_tops_upload_name = None
+
+if "last_render_success" not in st.session_state:
+    st.session_state.last_render_success = False
+
+if "last_export_success" not in st.session_state:
+    st.session_state.last_export_success = False
 
 
 def _las_header_section_df(las_obj, section_name: str) -> pd.DataFrame:
@@ -219,11 +413,11 @@ def _build_data_health(wells: dict, formation_tops: pd.DataFrame | None) -> dict
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    brand_cols = st.columns(2)
-    if os.path.exists(CENTENARY_IMAGE_PATH):
-        brand_cols[0].image(CENTENARY_IMAGE_PATH, width=95)
+    logo_paths = []
     if os.path.exists(IIT_ISM_LOGO_PATH):
-        brand_cols[1].image(IIT_ISM_LOGO_PATH, width=95)
+        logo_paths.append(IIT_ISM_LOGO_PATH)
+    if logo_paths:
+        st.image(logo_paths, width=92)
     st.title("Multi-well data loading, display, formation tops overlay and flattening")
     st.markdown("---")
 
@@ -280,27 +474,51 @@ with st.sidebar:
         ),
     )
     if tops_file is not None:
-        tops_df = load_formation_tops(tops_file)
-        if tops_df is not None:
-            st.session_state.formation_tops = tops_df
-            st.success(
-                f"Loaded {len(tops_df)} top entries across "
-                f"{tops_df['well'].nunique()} well(s)."
-            )
-        else:
-            st.error(
-                "Failed to load formation tops. "
-                "Ensure file has columns: well, formation, depth."
-            )
+        tops_bytes = tops_file.getvalue()
+        tops_sig = hashlib.md5(tops_bytes).hexdigest() if tops_bytes else None
+
+        # Process tops only when a newly selected file is different from the
+        # last successfully loaded one to avoid stale read-pointer behaviour
+        # across Streamlit reruns.
+        if tops_sig and tops_sig != st.session_state.formation_tops_upload_sig:
+            tops_df = load_formation_tops(tops_file)
+            if tops_df is not None:
+                st.session_state.formation_tops = tops_df
+                st.session_state.formation_tops_upload_sig = tops_sig
+                st.session_state.formation_tops_upload_name = tops_file.name
+                st.success(
+                    f"Loaded {len(tops_df)} top entries across "
+                    f"{tops_df['well'].nunique()} well(s)."
+                )
+            else:
+                st.session_state.formation_tops = None
+                st.session_state.formation_tops_upload_sig = None
+                st.session_state.formation_tops_upload_name = None
+                st.error(
+                    "Failed to load formation tops. "
+                    "Ensure file has columns: well, formation, depth."
+                )
 
     if st.session_state.formation_tops is not None:
+        active_name = st.session_state.formation_tops_upload_name or "Unknown"
+        active_sig = st.session_state.formation_tops_upload_sig or ""
+        short_sig = active_sig[:8] if active_sig else "n/a"
+        st.caption(f"Active tops file: {active_name} | id: {short_sig}")
         if st.button("🗑️ Clear tops"):
             st.session_state.formation_tops = None
+            st.session_state.formation_tops_upload_sig = None
+            st.session_state.formation_tops_upload_name = None
             st.rerun()
 
     # ── Visualisation controls ─────────────────────────────────────────────
     st.markdown("---")
     st.header("⚙️ Display Settings")
+
+    has_wells = bool(st.session_state.wells)
+    has_tops = (
+        st.session_state.formation_tops is not None
+        and not st.session_state.formation_tops.empty
+    )
 
     all_curves = get_all_curves(st.session_state.wells)
     common_curves = get_common_curves(st.session_state.wells)
@@ -310,6 +528,7 @@ with st.sidebar:
         ["All available tracks", "Common tracks only"],
         horizontal=True,
         help="Choose whether to pick tracks from all loaded LAS curves or only curves present in every well.",
+        disabled=not has_wells,
     )
     available_track_options = (
         all_curves if track_pool_mode == "All available tracks" else common_curves
@@ -339,12 +558,14 @@ with st.sidebar:
         options=available_track_options,
         default=default_curves,
         help="Choose exactly which tracks you want to see in the data visualization.",
+        disabled=not has_wells,
     )
 
     depth_label = st.selectbox(
         "Depth axis label",
         ["Depth (m)", "MD (m)", "TVD (m)", "TVDSS (m)"],
         index=0,
+        disabled=not has_wells,
     )
 
     # Depth range
@@ -364,6 +585,7 @@ with st.sidebar:
         value=(global_min, global_max),
         step=max(1.0, (global_max - global_min) / 500),
         format="%.1f",
+        disabled=not has_wells,
     )
 
     # ── Quality check (smoothing) ───────────────────────────────────────
@@ -371,25 +593,26 @@ with st.sidebar:
         "Quality check (moving average)",
         value=False,
         help="Smooth displayed tracks using a moving average filter for quick QC.",
+        disabled=not has_wells,
     )
     average_filter_window = st.selectbox(
         "Average filter window",
         options=[5, 10, 15],
         index=0,
-        disabled=not quality_check_enabled,
+        disabled=(not quality_check_enabled) or (not has_wells),
     )
 
     # ── Formation tops overlay toggle ─────────────────────────────────────
     show_tops = st.checkbox(
         "Show formation tops",
         value=True,
-        disabled=st.session_state.formation_tops is None,
+        disabled=(not has_tops) or (not has_wells),
     )
 
     shade_formations = st.checkbox(
         "Shade formation intervals",
         value=True,
-        disabled=st.session_state.formation_tops is None,
+        disabled=(not has_tops) or (not has_wells),
         help="Fill intervals between consecutive formation tops with translucent formation colors.",
     )
     formation_shade_alpha = st.slider(
@@ -398,7 +621,7 @@ with st.sidebar:
         max_value=0.40,
         value=0.14,
         step=0.01,
-        disabled=(st.session_state.formation_tops is None) or (not shade_formations),
+        disabled=(not has_tops) or (not shade_formations) or (not has_wells),
         help="Higher values make formation color shading stronger.",
     )
 
@@ -406,9 +629,13 @@ with st.sidebar:
     st.markdown("---")
     st.header("🔄 Flattening")
 
-    enable_flattening = st.checkbox("Enable flattening", value=False)
+    enable_flattening = st.checkbox(
+        "Enable flattening",
+        value=False,
+        disabled=(not has_tops) or (not has_wells),
+    )
     reference_formation = None
-    if enable_flattening and st.session_state.formation_tops is not None:
+    if enable_flattening and has_tops:
         formations = sorted(
             st.session_state.formation_tops["formation"].unique().tolist()
         )
@@ -423,7 +650,13 @@ with st.sidebar:
     # ── Export ────────────────────────────────────────────────────────────
     st.markdown("---")
     st.header("💾 Export")
-    export_format = st.radio("Format", ["PNG", "PDF"], horizontal=True)
+    ready_to_render = has_wells and bool(selected_curves)
+    export_format = st.radio(
+        "Format",
+        ["PNG", "PDF"],
+        horizontal=True,
+        disabled=not ready_to_render,
+    )
 
     # ── Sample data ───────────────────────────────────────────────────────
     st.markdown("---")
@@ -450,19 +683,64 @@ with st.sidebar:
 # Main display area
 # ---------------------------------------------------------------------------
 
-st.title("Multi-well data loading, display, formation tops overlay and flattening")
-st.caption("Interactive well-log comparison with formation-aware overlays")
+st.markdown(
+        """
+<div class="hero-card">
+    <span class="hero-kicker">Subsurface Correlation Studio</span>
+    <h1 class="hero-title">Multi-Well Log Visualization and Formation Correlation</h1>
+    <p class="hero-sub">Upload LAS files, overlay picks, flatten against a reference horizon, and compare logs with publication-ready clarity.</p>
+</div>
+""",
+        unsafe_allow_html=True,
+)
+
+step_load_wells = bool(st.session_state.wells)
+step_load_tops = (
+    st.session_state.formation_tops is not None
+    and not st.session_state.formation_tops.empty
+)
+step_choose_tracks = step_load_wells and bool(selected_curves)
+step_render = bool(st.session_state.last_render_success)
+step_export = bool(st.session_state.last_export_success)
+
+def _step_chip(label: str, done: bool, active: bool = False) -> str:
+    css = "wf-chip"
+    if done:
+        css += " done"
+    elif active:
+        css += " active"
+    icon = "✓" if done else "○"
+    return f'<span class="{css}">{icon} {label}</span>'
+
+stepper_html = "".join(
+    [
+        _step_chip("Load wells", step_load_wells, not step_load_wells),
+        '<span class="wf-arrow">→</span>',
+        _step_chip("Load tops", step_load_tops, step_load_wells and not step_load_tops),
+        '<span class="wf-arrow">→</span>',
+        _step_chip("Choose tracks", step_choose_tracks, step_load_wells and not step_choose_tracks),
+        '<span class="wf-arrow">→</span>',
+        _step_chip("Render", step_render, step_choose_tracks and not step_render),
+        '<span class="wf-arrow">→</span>',
+        _step_chip("Export", step_export, step_render and not step_export),
+    ]
+)
+st.markdown(f'<div class="wf-stepper">{stepper_html}</div>', unsafe_allow_html=True)
 
 tabs = st.tabs(["📊 Data Visualization", "📋 Data Summary", "📈 Statistics", "📖 Help"])
 
 # ── Tab 1: Data Visualization ─────────────────────────────────────────────
 with tabs[0]:
     if not st.session_state.wells:
+        st.session_state.last_render_success = False
+        st.session_state.last_export_success = False
         st.info(
             "👈 Upload LAS files from the sidebar to get started.  "
             "Sample data is available in the `sample_data/` directory."
         )
     elif not selected_curves:
+        st.session_state.last_render_success = False
+        st.session_state.last_export_success = False
         st.warning("Select at least one curve in the sidebar to display.")
     else:
         # Determine working data (flattened or original)
@@ -492,13 +770,6 @@ with tabs[0]:
                 f"🔄 Flattened on **{reference_formation}**. "
                 "Depth axis is relative offset from the reference top."
             )
-
-        # Validation warnings
-        warnings_list = validate_wells(working_wells)
-        if warnings_list:
-            with st.expander("⚠️ Data quality warnings", expanded=False):
-                for w in warnings_list:
-                    st.warning(w)
 
         st.markdown("---")
         st.subheader("Data Health")
@@ -551,7 +822,6 @@ with tabs[0]:
                             {
                                 "MNEM": str(getattr(curve_item, "mnemonic", "")),
                                 "UNIT": str(getattr(curve_item, "unit", "")),
-                                "API CODE": str(getattr(curve_item, "value", "")),
                                 "DESCRIPTION": str(getattr(curve_item, "descr", "")),
                             }
                         )
@@ -577,6 +847,7 @@ with tabs[0]:
         )
         figure_title = f"{base_title} ({well_names_label})"
 
+        st.session_state.last_export_success = False
         with st.spinner("Rendering data visualization…"):
             fig = plot_cross_section(
                 wells=working_wells,
@@ -591,41 +862,23 @@ with tabs[0]:
                 depth_label=depth_label,
                 title=figure_title,
             )
+            st.session_state.last_render_success = True
 
         st.pyplot(fig, use_container_width=True)
-
-        st.markdown("---")
-        st.subheader("LAS File Headers")
-        st.caption("Header metadata from uploaded LAS files.")
-
-        for wname, raw_well in st.session_state.wells.items():
-            with st.expander(f"{wname} header", expanded=False):
-                las_obj = raw_well.get("las")
-                if las_obj is None:
-                    st.info("Header data is not available for this well.")
-                    continue
-
-                for label, section_name in [
-                    ("Version", "version"),
-                    ("Well", "well"),
-                    ("Parameters", "params"),
-                ]:
-                    header_df = _las_header_section_df(las_obj, section_name)
-                    if not header_df.empty:
-                        st.markdown(f"**{label} section**")
-                        st.dataframe(header_df, use_container_width=True, hide_index=True)
 
         # Export button
         buf = io.BytesIO()
         fmt = export_format.lower()
         fig.savefig(buf, format=fmt, bbox_inches="tight", dpi=150)
         buf.seek(0)
-        st.download_button(
+        download_clicked = st.download_button(
             label=f"⬇️ Download {export_format}",
             data=buf,
             file_name=f"data_visualization.{fmt}",
             mime=f"image/{fmt}" if fmt == "png" else "application/pdf",
         )
+        if download_clicked:
+            st.session_state.last_export_success = True
         plt.close(fig)
 
 # ── Tab 2: Data Summary ───────────────────────────────────────────────────
