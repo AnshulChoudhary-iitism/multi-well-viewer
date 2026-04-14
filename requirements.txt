@@ -8,3 +8,4 @@ scipy>=1.11.0
 kaleido>=0.2.1
 openpyxl>=3.1.0
 xlrd>=2.0.1
+reportlab>=4.0.0

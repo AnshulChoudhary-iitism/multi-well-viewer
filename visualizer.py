@@ -17,6 +17,7 @@ import matplotlib.patches as mpatches
 from matplotlib.patches import ConnectionPatch
 import numpy as np
 import pandas as pd
+from scipy.interpolate import griddata
 
 plt.rcParams["font.family"] = "Times New Roman"
 
@@ -728,4 +729,165 @@ def plot_well_correlation(
         )
 
     plt.tight_layout(rect=[0, 0.05, 1, 0.96])
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Isopach (Thickness) Contour Maps
+# ---------------------------------------------------------------------------
+
+def plot_isopach_map(
+    formation_tops: pd.DataFrame,
+    formation_name: str,
+    well_order: Optional[list[str]] = None,
+    figsize: tuple[float, float] = (12, 8),
+    title: str = "Isopach Map",
+    font_scale: float = 1.0,
+    theme_preset: str = "Geo Light",
+    cmap: str = "RdYlGn_r",
+    n_contours: int = 12,
+) -> plt.Figure:
+    """Generate an isopach (thickness) contour map for a formation.
+    
+    Shows formation thickness variations across wells, identifying depocenters
+    and structural trends through color-coded thickness intervals.
+    
+    Parameters
+    ----------
+    formation_tops : pd.DataFrame
+        Formation tops table with columns: well, formation, depth
+    formation_name : str
+        Formation to generate isopach map for
+    well_order : list[str] or None
+        Ordered list of well names. If None, uses natural order from data.
+    figsize : (float, float)
+        Figure size in inches
+    title : str
+        Figure title
+    font_scale : float
+        Font scaling factor
+    theme_preset : str
+        One of ``Geo Light``, ``Mono Print`` or ``Earth Warm``
+    cmap : str
+        Matplotlib colormap name
+    n_contours : int
+        Number of contour levels
+        
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    if formation_tops is None or formation_tops.empty:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.text(0.5, 0.5, "No formation tops data", ha="center", va="center")
+        return fig
+    
+    theme = THEME_PRESETS.get(theme_preset, THEME_PRESETS["Geo Light"])
+    
+    # Calculate formation thickness per well
+    pts_data = []
+    thickness_data = []
+    well_labels = []
+    
+    formations = formation_tops["formation"].unique()
+    matching_formations = [f for f in formations 
+                          if str(formation_name).strip().lower() in str(f).strip().lower()]
+    
+    if not matching_formations:
+        matching_formation = formation_name
+    else:
+        matching_formation = matching_formations[0]
+    
+    # Group by well
+    well_groups = formation_tops.groupby(
+        formation_tops["well"].map(_normalize_well_name)
+    )
+    
+    for well_idx, (well_key, group) in enumerate(well_groups):
+        well_name = group.iloc[0]["well"]
+        group_sorted = group.sort_values("depth")
+        
+        # Find matching formation and next formation for thickness
+        for idx in range(len(group_sorted) - 1):
+            top_row = group_sorted.iloc[idx]
+            base_row = group_sorted.iloc[idx + 1]
+            
+            if str(matching_formation).strip().lower() in str(top_row["formation"]).strip().lower():
+                top_depth = float(top_row["depth"])
+                base_depth = float(base_row["depth"])
+                thickness = base_depth - top_depth
+                
+                # Use well index as x position, average depth as y position
+                pts_data.append([well_idx, (top_depth + base_depth) / 2])
+                thickness_data.append(thickness)
+                well_labels.append(well_name)
+                break
+    
+    if not pts_data:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.text(0.5, 0.5, f"No data for {formation_name}", ha="center", va="center")
+        return fig
+    
+    pts = np.array(pts_data)
+    thickness_vals = np.array(thickness_data)
+    
+    # Create grid for interpolation
+    grid_x = np.linspace(pts[:, 0].min() - 0.5, pts[:, 0].max() + 0.5, 100)
+    grid_y = np.linspace(pts[:, 1].min() - 50, pts[:, 1].max() + 50, 100)
+    grid_X, grid_Y = np.meshgrid(grid_x, grid_y)
+    
+    # Interpolate thickness values - choose method based on number of points
+    n_points = len(pts_data)
+    if n_points >= 4:
+        method = "cubic"
+    elif n_points >= 3:
+        method = "linear"
+    else:
+        method = "nearest"
+    
+    grid_Z = griddata(pts, thickness_vals, (grid_X, grid_Y), method=method)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_facecolor(theme["facecolor"])
+    ax.set_facecolor(theme["facecolor"])
+    
+    # Plot contours
+    contour = ax.contourf(grid_X, grid_Y, grid_Z, levels=n_contours, cmap=cmap, alpha=0.8)
+    contour_lines = ax.contour(grid_X, grid_Y, grid_Z, levels=n_contours // 2, 
+                               colors="black", linewidths=0.5, alpha=0.3)
+    ax.clabel(contour_lines, inline=True, fontsize=8, fmt="%.0f m")
+    
+    # Plot well locations
+    ax.scatter(pts[:, 0], pts[:, 1], s=100, c="black", zorder=5, edgecolor="white", linewidth=2)
+    
+    # Add well labels
+    for idx, (pt, thick, label) in enumerate(zip(pts, thickness_vals, well_labels)):
+        ax.text(pt[0], pt[1], f"{label}\n{thick:.1f}m", 
+               ha="center", va="center", fontsize=8, fontweight="bold",
+               bbox=dict(boxstyle="round,pad=0.4", facecolor="white", 
+                        edgecolor="black", alpha=0.8))
+    
+    # Formatting
+    title_fs = max(14, int(round(18 * font_scale)))
+    label_fs = max(11, int(round(12 * font_scale)))
+    
+    ax.set_xlabel("Well Index (West → East)", fontsize=label_fs, fontweight="bold")
+    ax.set_ylabel("Depth / Structural Position (m)", fontsize=label_fs, fontweight="bold")
+    ax.set_title(f"Isopach Map: {matching_formation}", fontsize=title_fs, fontweight="bold", pad=20)
+    
+    # Colorbar
+    cbar = plt.colorbar(contour, ax=ax, label="Thickness (m)", pad=0.02)
+    cbar.ax.tick_params(labelsize=10)
+    
+    # Grid
+    ax.grid(True, alpha=0.3, linestyle="--", color=theme["grid_major"])
+    
+    # Add statistics box
+    stats_text = f"Mean: {thickness_vals.mean():.1f} m\nMin: {thickness_vals.min():.1f} m\nMax: {thickness_vals.max():.1f} m\nStd: {thickness_vals.std():.1f} m"
+    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+           fontsize=9, verticalalignment="top",
+           bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8))
+    
+    plt.tight_layout()
     return fig

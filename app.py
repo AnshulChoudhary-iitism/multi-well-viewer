@@ -28,7 +28,8 @@ from flattening import (
     flatten_wells,
     get_flattened_depth_range,
 )
-from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation
+from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation, plot_isopach_map
+from report_generator import generate_pdf_report
 
 # ---------------------------------------------------------------------------
 # Page configuration
@@ -636,13 +637,23 @@ with st.sidebar:
     )
     reference_formation = None
     if enable_flattening and has_tops:
+        # Predefined common flattening surfaces
+        predefined_surfaces = [
+            "Maximum Flooding Surface (MFS)",
+            "Sequence Boundary",
+        ]
+        
         formations = sorted(
             st.session_state.formation_tops["formation"].unique().tolist()
         )
+        
+        # Combine predefined surfaces with loaded formations, avoiding duplicates
+        all_options = predefined_surfaces + [f for f in formations if f not in predefined_surfaces]
+        
         reference_formation = st.selectbox(
-            "Reference formation",
-            options=formations,
-            help="All well logs will be shifted so this top aligns at depth 0.",
+            "Flatten on:",
+            options=all_options,
+            help="Choose a reference surface to align all wells. Can be a predefined surface or a loaded formation top.",
         )
     elif enable_flattening:
         st.info("Load formation tops to enable flattening.")
@@ -662,6 +673,16 @@ with st.sidebar:
         value=True,
         disabled=(vis_mode != "Well correlation diagram") or (not has_wells),
         help="Overlay a thin, normalized GR profile on each column in the correlation diagram.",
+    )
+
+    # ── PDF Report ────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.header("📄 PDF Report")
+    generate_report = st.checkbox(
+        "Generate comprehensive report",
+        value=False,
+        disabled=(not has_wells) or (not has_tops),
+        help="One-click PDF report with well summary, formation tops, and thickness analysis.",
     )
 
     # ── Export ────────────────────────────────────────────────────────────
@@ -705,7 +726,7 @@ st.markdown(
 <div class="hero-card">
     <span class="hero-kicker">Subsurface Correlation Studio</span>
     <h1 class="hero-title">Multi-Well Log Visualization and Formation Correlation</h1>
-    <p class="hero-sub">Upload LAS files, overlay picks, flatten against a reference horizon, and compare logs with publication-ready clarity.</p>
+    <p class="hero-sub">Upload LAS files, overlay picks, and flatten against a reference horizon.</p>
 </div>
 """,
         unsafe_allow_html=True,
@@ -744,7 +765,7 @@ stepper_html = "".join(
 )
 st.markdown(f'<div class="wf-stepper">{stepper_html}</div>', unsafe_allow_html=True)
 
-tabs = st.tabs(["📊 Data Visualization", "📋 Data Summary", "📈 Statistics", "📖 Help"])
+tabs = st.tabs(["📊 Data Visualization", "📋 Data Summary", "📈 Statistics", "�️ Isopach Maps", "�📖 Help"])
 
 # ── Tab 1: Data Visualization ─────────────────────────────────────────────
 with tabs[0]:
@@ -911,6 +932,32 @@ with tabs[0]:
             st.session_state.last_export_success = True
         plt.close(fig)
 
+        # PDF Report button
+        st.markdown("---")
+        if generate_report and has_tops:
+            with st.spinner("Generating PDF report…"):
+                try:
+                    report_buf = generate_pdf_report(
+                        wells=st.session_state.wells,
+                        formation_tops=st.session_state.formation_tops,
+                        title="Multi-Well Analysis Report",
+                    )
+                    st.download_button(
+                        label="📥 Download PDF Report",
+                        data=report_buf,
+                        file_name="multi_well_report.pdf",
+                        mime="application/pdf",
+                    )
+                    st.success("✅ PDF report generated successfully!")
+                except ImportError:
+                    st.error(
+                        "❌ reportlab library not found. Install with: `pip install reportlab`"
+                    )
+                except Exception as e:
+                    st.error(f"❌ Error generating report: {str(e)}")
+        elif generate_report:
+            st.warning("Load formation tops to generate the PDF report.")
+
 # ── Tab 2: Data Summary ───────────────────────────────────────────────────
 with tabs[1]:
     if not st.session_state.wells:
@@ -994,49 +1041,51 @@ with tabs[2]:
                 st.markdown(f"**{wname}**")
                 st.dataframe(stats_df.round(4), use_container_width=True)
 
-# ── Tab 4: Help ────────────────────────────────────────────────────────────
+# ── Tab 4: Isopach Maps ──────────────────────────────────────────────────
 with tabs[3]:
-    st.markdown(
-        """
-## How to Use Multi-well data loading, display, formation tops overlay and flattening
-
-### 1. Load Well Data
-- Click **Upload LAS files** in the sidebar.
-- You can upload **multiple LAS files** at once.
-- Each file will appear as a separate well in the viewer.
-
-### 2. Load Formation Tops *(optional)*
-- Prepare a CSV/Excel file with columns: `well`, `formation`, `depth`.
-- Optionally add a `color` column (hex colour, e.g. `#e6194b`).
-- Upload via **Upload formation tops (CSV/Excel)** in the sidebar.
-
-### 3. Configure Display
-- Select which **log curves** to show in the data visualization.
-- Adjust the **depth window** slider to zoom in/out.
-- Toggle **Show formation tops** to overlay picks on the tracks.
-
-### 4. Flatten on a Formation Top
-- Enable **Flattening** in the sidebar.
-- Choose the **reference formation** from the dropdown.
-- All wells will be depth-shifted so the reference top aligns at 0.
-
-### 5. Export
-- Use the **Download PNG / PDF** button below the data visualization figure.
-
----
-
-### Sample Formation Tops CSV
-```
-well,formation,depth
-WELL_A,Top Sand,1200.5
-WELL_A,Base Shale,1450.0
-WELL_B,Top Sand,1185.0
-WELL_B,Base Shale,1432.5
-```
-
-### Supported Curves
-Common LAS mnemonics that receive predefined colour/scale styling:
-`GR`, `RHOB`, `NPHI`, `RT`, `ILD`, `LLD`, `DT`, `PHIE`, `SW`, `VSH`.
-Any other curve will be plotted with a default grey style on a linear scale.
-        """
-    )
+    if not st.session_state.wells:
+        st.info("No wells loaded yet.")
+    elif st.session_state.formation_tops is None or st.session_state.formation_tops.empty:
+        st.warning("Load formation tops to generate isopach maps.")
+    else:
+        st.subheader("Formation Thickness Analysis")
+        st.markdown("Generate isopach maps to visualize formation thickness variations and identify depocenters.")
+        
+        formations = sorted(
+            st.session_state.formation_tops["formation"].unique().tolist()
+        )
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            selected_formation = st.selectbox(
+                "Select formation for isopach map",
+                options=formations,
+                help="Formation top for which to generate thickness contour map.",
+            )
+        with col2:
+            n_contours = st.slider("Contour levels", min_value=6, max_value=20, value=12, step=2)
+        
+        if selected_formation:
+            with st.spinner("Generating isopach map…"):
+                try:
+                    iso_fig = plot_isopach_map(
+                        formation_tops=st.session_state.formation_tops,
+                        formation_name=selected_formation,
+                        n_contours=n_contours,
+                        title=f"Isopach Map: {selected_formation}",
+                    )
+                    st.pyplot(iso_fig, use_container_width=True)
+                    
+                    # Download isopach map
+                    iso_buf = io.BytesIO()
+                    iso_fig.savefig(iso_buf, format="png", bbox_inches="tight", dpi=150)
+                    iso_buf.seek(0)
+                    st.download_button(
+                        label="⬇️ Download Isopach Map (PNG)",
+                        data=iso_buf,
+                        file_name=f"isopach_{selected_formation.replace(' ', '_')}.png",
+                        mime="image/png",
+                    )
+                    plt.close(iso_fig)
+                except Exception as e:
+                    st.error(f"Error generating isopach map: {str(e)}")
