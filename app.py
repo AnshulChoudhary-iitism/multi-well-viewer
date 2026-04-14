@@ -28,7 +28,7 @@ from flattening import (
     flatten_wells,
     get_flattened_depth_range,
 )
-from visualizer import plot_cross_section, plot_curve_histogram
+from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation
 
 # ---------------------------------------------------------------------------
 # Page configuration
@@ -647,6 +647,23 @@ with st.sidebar:
     elif enable_flattening:
         st.info("Load formation tops to enable flattening.")
 
+    # ── Visualization style ───────────────────────────────────────────────
+    st.markdown("---")
+    st.header("📊 Visualization")
+    vis_mode = st.radio(
+        "Display mode",
+        ["Cross-section with curves", "Well correlation diagram"],
+        help="Choose between traditional log-curve cross-section or stratigraphic formation correlation view.",
+        disabled=not has_wells,
+    )
+
+    show_gr_in_correlation = st.checkbox(
+        "Show GR curve overlay",
+        value=True,
+        disabled=(vis_mode != "Well correlation diagram") or (not has_wells),
+        help="Overlay a thin, normalized GR profile on each column in the correlation diagram.",
+    )
+
     # ── Export ────────────────────────────────────────────────────────────
     st.markdown("---")
     st.header("💾 Export")
@@ -849,19 +866,32 @@ with tabs[0]:
 
         st.session_state.last_export_success = False
         with st.spinner("Rendering data visualization…"):
-            fig = plot_cross_section(
-                wells=working_wells,
-                curves_to_plot=selected_curves,
-                depth_min=flat_depth_min,
-                depth_max=flat_depth_max,
-                formation_tops=working_tops if show_tops else None,
-                show_tops=show_tops,
-                shade_formations=shade_formations,
-                formation_shade_alpha=formation_shade_alpha,
-                smoothing_window=(average_filter_window if quality_check_enabled else None),
-                depth_label=depth_label,
-                title=figure_title,
-            )
+            if vis_mode == "Well correlation diagram":
+                # Render well correlation diagram
+                fig = plot_well_correlation(
+                    wells=working_wells,
+                    formation_tops=working_tops if show_tops else None,
+                    depth_min=flat_depth_min,
+                    depth_max=flat_depth_max,
+                    depth_label=depth_label,
+                    title=figure_title,
+                    show_gr_curve=show_gr_in_correlation,
+                )
+            else:
+                # Render traditional cross-section with curves
+                fig = plot_cross_section(
+                    wells=working_wells,
+                    curves_to_plot=selected_curves,
+                    depth_min=flat_depth_min,
+                    depth_max=flat_depth_max,
+                    formation_tops=working_tops if show_tops else None,
+                    show_tops=show_tops,
+                    shade_formations=shade_formations,
+                    formation_shade_alpha=formation_shade_alpha,
+                    smoothing_window=(average_filter_window if quality_check_enabled else None),
+                    depth_label=depth_label,
+                    title=figure_title,
+                )
             st.session_state.last_render_success = True
 
         st.pyplot(fig, use_container_width=True)

@@ -439,3 +439,293 @@ def plot_curve_histogram(
     ax.legend(fontsize=9)
     plt.tight_layout()
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Well correlation diagram (stratigraphic column view)
+# ---------------------------------------------------------------------------
+
+def plot_well_correlation(
+    wells: dict,
+    formation_tops: Optional[pd.DataFrame] = None,
+    depth_min: Optional[float] = None,
+    depth_max: Optional[float] = None,
+    figsize_per_well: tuple[float, float] = (1.2, 10.0),
+    depth_label: str = "Depth (m)",
+    title: str = "Well Correlation Diagram",
+    font_scale: float = 1.0,
+    line_thickness_scale: float = 1.0,
+    theme_preset: str = "Geo Light",
+    show_gr_curve: bool = True,
+) -> plt.Figure:
+    """Build and return a well correlation diagram showing formation intervals.
+
+    This creates a stratigraphic column view where each well is displayed as
+    a vertical strip, and formation intervals are shown as colored horizontal
+    bands. Connector lines link the same formations across adjacent wells.
+
+    Parameters
+    ----------
+    wells : dict
+        Well data dict (name → data) as produced by
+        :func:`data_loader.load_las_file` (or the flattened version).
+    formation_tops : pd.DataFrame or None
+        Formation tops table with columns well, formation, depth, color.
+    depth_min, depth_max : float or None
+        Depth window to display. If None, computed from well data.
+    figsize_per_well : (float, float)
+        (width, height) in inches per well.
+    depth_label : str
+        Label for the Y-axis.
+    title : str
+        Figure title.
+    font_scale : float
+        Global font scaling factor.
+    line_thickness_scale : float
+        Multiplier for connector line widths.
+    theme_preset : str
+        One of ``Geo Light``, ``Mono Print`` or ``Earth Warm``.
+    show_gr_curve : bool
+        Whether to overlay a thin GR curve for reference.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    n_wells = len(wells)
+    if n_wells == 0:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No wells to display", ha="center", va="center")
+        return fig
+
+    # Determine depth range
+    if depth_min is None or depth_max is None:
+        all_depths = np.concatenate([w["depth"] for w in wells.values()])
+        if depth_min is None:
+            depth_min = float(np.nanmin(all_depths))
+        if depth_max is None:
+            depth_max = float(np.nanmax(all_depths))
+
+    # Setup figure
+    fig_w = figsize_per_well[0] * n_wells
+    fig, axes = plt.subplots(
+        1, n_wells,
+        figsize=(max(fig_w, 8), figsize_per_well[1]),
+        sharey=True,
+    )
+    if n_wells == 1:
+        axes = [axes]
+
+    theme = THEME_PRESETS.get(theme_preset, THEME_PRESETS["Geo Light"])
+    fig.patch.set_facecolor(theme["facecolor"])
+
+    title_fs = max(11, int(round(15 * font_scale)))
+    axis_label_fs = max(9, int(round(11 * font_scale)))
+    tick_fs = max(7, int(round(9 * font_scale)))
+    formation_label_fs = max(7, int(round(8 * font_scale)))
+    well_label_fs = max(8, int(round(10 * font_scale)))
+
+    fig.suptitle(title, fontsize=title_fs, fontweight="bold", y=0.99)
+
+    well_names = list(wells.keys())
+    tops_colors: dict[str, str] = {}
+    marker_depths_by_well: dict[str, dict[str, float]] = {}
+
+    # Build metadata from formation tops
+    if formation_tops is not None and not formation_tops.empty:
+        formation_tops = formation_tops.copy()
+        formation_tops["_well_key"] = formation_tops["well"].map(_normalize_well_name)
+        for _, row in formation_tops.iterrows():
+            tops_colors[row["formation"]] = row["color"]
+
+    # Plot each well as a column
+    for wi, well_name in enumerate(well_names):
+        ax = axes[wi]
+        well = wells[well_name]
+        df = well["df"]
+        depth_col = df.columns[0]
+        well_key = _normalize_well_name(well_name)
+
+        # Mask to depth window
+        mask = (df[depth_col] >= depth_min) & (df[depth_col] <= depth_max)
+        df_win = df[mask]
+
+        # Set background
+        ax.set_facecolor(theme["facecolor"])
+
+        # Grid
+        ax.grid(
+            axis="y",
+            which="major",
+            linestyle="--",
+            linewidth=0.5,
+            color=theme["grid_major"],
+            alpha=0.6,
+        )
+
+        # Collect formation intervals for this well
+        well_tops = pd.DataFrame()
+        formation_intervals: list[tuple[float, float, str, str]] = []  # (top, base, color, name)
+        
+        if formation_tops is not None and not formation_tops.empty:
+            well_tops = formation_tops[formation_tops["_well_key"] == well_key].copy()
+            if not well_tops.empty:
+                well_tops["depth"] = pd.to_numeric(well_tops["depth"], errors="coerce")
+                well_tops = well_tops.dropna(subset=["depth"]).sort_values("depth")
+
+                # Build interval pairs
+                top_rows = well_tops[["depth", "color", "formation"]].to_dict("records")
+                for idx in range(len(top_rows) - 1):
+                    top_depth = float(top_rows[idx]["depth"])
+                    base_depth = float(top_rows[idx + 1]["depth"])
+                    if base_depth <= depth_min or top_depth >= depth_max:
+                        continue
+                    y0 = max(top_depth, depth_min)
+                    y1 = min(base_depth, depth_max)
+                    if y1 > y0:
+                        formation_intervals.append(
+                            (y0, y1, str(top_rows[idx]["color"]), str(top_rows[idx]["formation"]))
+                        )
+
+                # Store depths for connectors
+                dedup_tops = well_tops.drop_duplicates(subset=["formation"], keep="first")
+                marker_depths_by_well[well_name] = {
+                    str(row["formation"]): float(row["depth"])
+                    for _, row in dedup_tops.iterrows()
+                }
+
+        # Draw formation intervals
+        for y_top, y_base, color, formation_name in formation_intervals:
+            ax.axhspan(y_top, y_base, xmin=0, xmax=1, color=color, alpha=0.25, zorder=1)
+            ax.axhline(y_top, color=color, linewidth=1.0, linestyle="-", alpha=0.8, zorder=2)
+
+        # Draw formation tops as lines and labels
+        if not well_tops.empty:
+            for _, row in well_tops.iterrows():
+                td = float(row["depth"])
+                if depth_min <= td <= depth_max:
+                    ax.axhline(
+                        td,
+                        color=row["color"],
+                        linewidth=1.2 * float(line_thickness_scale),
+                        linestyle="-",
+                        alpha=0.9,
+                        zorder=3,
+                    )
+                    # Formation label on left side
+                    ax.text(
+                        0.02,
+                        td,
+                        f"{row['formation']}",
+                        fontsize=formation_label_fs,
+                        va="center",
+                        ha="left",
+                        color=row["color"],
+                        fontweight="bold",
+                        transform=ax.get_yaxis_transform(),
+                        bbox=dict(
+                            boxstyle="round,pad=0.3",
+                            facecolor="white",
+                            alpha=0.7,
+                            edgecolor="none",
+                        ),
+                        clip_on=True,
+                    )
+
+        # Optional: overlay thin GR curve as reference
+        if show_gr_curve and "GR" in df.columns:
+            gr_vals = df_win["GR"].values
+            if len(gr_vals) > 0 and not np.isnan(gr_vals).all():
+                depth_vals = df_win[depth_col].values
+                # Normalize GR to 0-1 for positioning
+                gr_min, gr_max = np.nanmin(gr_vals), np.nanmax(gr_vals)
+                if gr_max > gr_min:
+                    gr_norm = (gr_vals - gr_min) / (gr_max - gr_min)
+                else:
+                    gr_norm = 0.5 * np.ones_like(gr_vals)
+                ax.plot(
+                    gr_norm,
+                    depth_vals,
+                    color="#4caf50",
+                    linewidth=0.8,
+                    alpha=0.4,
+                    zorder=0,
+                    label="GR (normalized)",
+                )
+
+        # Axis decoration
+        ax.set_xlim(0, 1)
+        ax.set_ylim(depth_max, depth_min)  # Inverted depth axis
+        ax.set_xlabel(well_name, fontsize=well_label_fs, fontweight="bold", labelpad=6)
+        ax.tick_params(axis="x", labelbottom=False)
+        ax.tick_params(axis="y", labelsize=tick_fs)
+
+        if wi == 0:
+            ax.set_ylabel(depth_label, fontsize=axis_label_fs, fontweight="bold")
+        else:
+            ax.set_ylabel("")
+
+        ax.spines["top"].set_visible(True)
+        ax.spines["bottom"].set_visible(True)
+        ax.spines["left"].set_linewidth(1.5)
+        ax.spines["right"].set_visible(False)
+
+    # Draw connector lines between adjacent wells
+    if n_wells > 1 and marker_depths_by_well:
+        for wi in range(n_wells - 1):
+            left_well = well_names[wi]
+            right_well = well_names[wi + 1]
+            left_tops = marker_depths_by_well.get(left_well, {})
+            right_tops = marker_depths_by_well.get(right_well, {})
+            
+            if not left_tops or not right_tops:
+                continue
+
+            common_forms = set(left_tops.keys()) & set(right_tops.keys())
+            if not common_forms:
+                continue
+
+            left_ax = axes[wi]
+            right_ax = axes[wi + 1]
+
+            for formation in sorted(common_forms):
+                y_left = float(left_tops[formation])
+                y_right = float(right_tops[formation])
+                
+                if not (depth_min <= y_left <= depth_max and depth_min <= y_right <= depth_max):
+                    continue
+
+                connector_color = tops_colors.get(formation, theme["connector"])
+                connector = ConnectionPatch(
+                    xyA=(1.0, y_left),
+                    coordsA=left_ax.transData,
+                    xyB=(0.0, y_right),
+                    coordsB=right_ax.transData,
+                    color=connector_color,
+                    linewidth=max(0.8, 1.0 * float(line_thickness_scale)),
+                    linestyle="--",
+                    alpha=0.6,
+                    zorder=1,
+                )
+                fig.add_artist(connector)
+
+    # Legend
+    if tops_colors:
+        patches = [
+            mpatches.Patch(color=c, label=f)
+            for f, c in tops_colors.items()
+        ]
+        fig.legend(
+            handles=patches,
+            loc="lower center",
+            ncol=min(len(patches), 8),
+            fontsize=max(7, int(round(8 * font_scale))),
+            title="Formations",
+            bbox_to_anchor=(0.5, -0.05),
+            frameon=True,
+            fancybox=True,
+            shadow=False,
+        )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 0.96])
+    return fig
