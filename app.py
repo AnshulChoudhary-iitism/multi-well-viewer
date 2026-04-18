@@ -28,7 +28,7 @@ from flattening import (
     flatten_wells,
     get_flattened_depth_range,
 )
-from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation, plot_isopach_map
+from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation
 from report_generator import generate_pdf_report
 
 # ---------------------------------------------------------------------------
@@ -725,7 +725,7 @@ st.markdown(
         """
 <div class="hero-card">
     <span class="hero-kicker">Subsurface Correlation Studio</span>
-    <h1 class="hero-title">Multi-Well Log Visualization and Formation Correlation</h1>
+    <h1 class="hero-title">Multi-Well Correlation and Flattening Tool</h1>
     <p class="hero-sub">Upload LAS files, overlay picks, and flatten against a reference horizon.</p>
 </div>
 """,
@@ -765,7 +765,7 @@ stepper_html = "".join(
 )
 st.markdown(f'<div class="wf-stepper">{stepper_html}</div>', unsafe_allow_html=True)
 
-tabs = st.tabs(["📊 Data Visualization", "📋 Data Summary", "📈 Statistics", "�️ Isopach Maps", "�📖 Help"])
+tabs = st.tabs(["📊 Data Visualization", "📋 Data Summary", "📈 Statistics", "📖 Help"])
 
 # ── Tab 1: Data Visualization ─────────────────────────────────────────────
 with tabs[0]:
@@ -1041,51 +1041,31 @@ with tabs[2]:
                 st.markdown(f"**{wname}**")
                 st.dataframe(stats_df.round(4), use_container_width=True)
 
-# ── Tab 4: Isopach Maps ──────────────────────────────────────────────────
+# ── Tab 4: Help ───────────────────────────────────────────────────────────
 with tabs[3]:
-    if not st.session_state.wells:
-        st.info("No wells loaded yet.")
-    elif st.session_state.formation_tops is None or st.session_state.formation_tops.empty:
-        st.warning("Load formation tops to generate isopach maps.")
-    else:
-        st.subheader("Formation Thickness Analysis")
-        st.markdown("Generate isopach maps to visualize formation thickness variations and identify depocenters.")
-        
-        formations = sorted(
-            st.session_state.formation_tops["formation"].unique().tolist()
-        )
-        
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            selected_formation = st.selectbox(
-                "Select formation for isopach map",
-                options=formations,
-                help="Formation top for which to generate thickness contour map.",
-            )
-        with col2:
-            n_contours = st.slider("Contour levels", min_value=6, max_value=20, value=12, step=2)
-        
-        if selected_formation:
-            with st.spinner("Generating isopach map…"):
-                try:
-                    iso_fig = plot_isopach_map(
-                        formation_tops=st.session_state.formation_tops,
-                        formation_name=selected_formation,
-                        n_contours=n_contours,
-                        title=f"Isopach Map: {selected_formation}",
-                    )
-                    st.pyplot(iso_fig, use_container_width=True)
-                    
-                    # Download isopach map
-                    iso_buf = io.BytesIO()
-                    iso_fig.savefig(iso_buf, format="png", bbox_inches="tight", dpi=150)
-                    iso_buf.seek(0)
-                    st.download_button(
-                        label="⬇️ Download Isopach Map (PNG)",
-                        data=iso_buf,
-                        file_name=f"isopach_{selected_formation.replace(' ', '_')}.png",
-                        mime="image/png",
-                    )
-                    plt.close(iso_fig)
-                except Exception as e:
-                    st.error(f"Error generating isopach map: {str(e)}")
+    st.markdown("""
+    ### 📖 Quick Start Guide
+    
+    **1. Load Wells:**
+    - Upload one or more LAS well-log files using the file uploader
+    
+    **2. Configure Display:**
+    - Select which curves to display (GR, Resistivity, Density, etc.)
+    - Choose smoothing and depth range as needed
+    
+    **3. Add Formation Tops:**
+    - Import a CSV file with formation picks to overlay on the cross-section
+    
+    **4. Flatten (Optional):**
+    - Select a reference formation to flatten all wells to that horizon
+    
+    **5. Export Results:**
+    - Download the cross-section as PNG or PDF
+    
+    ### 📊 Features
+    - **Multi-well cross-section** with configurable log tracks
+    - **Formation tops overlay** with color-coded markers
+    - **Depth flattening** to align wells on a reference formation
+    - **Statistics panel** with per-well curve statistics
+    - **PDF reports** for documentation and sharing
+    """)
