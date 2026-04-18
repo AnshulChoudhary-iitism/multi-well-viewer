@@ -77,6 +77,39 @@ html, body, [class*="css"] {
     color: var(--text-main);
 }
 
+/* Enhanced color contrast for WCAG AA compliance */
+:root {
+    --text-main: #1a2f2e;
+    --text-muted: #3d5354;
+}
+
+/* Improved alert styling for better contrast */
+.stAlert {
+    border-radius: 10px;
+    border-left: 4px solid;
+    padding: 1rem;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.stAlert > div > div:first-child {
+    font-weight: 600;
+}
+
+/* Success alert */
+.stAlert {
+    --alert-color: #065e5b;
+}
+
+div[data-testid="stAlert"] {
+    border-radius: 10px;
+    border-left: 5px solid;
+}
+
 .stApp {
     background:
         radial-gradient(1300px 420px at -10% -8%, #ffffff 0%, rgba(255,255,255,0) 60%),
@@ -104,7 +137,27 @@ html, body, [class*="css"] {
 h1, h2, h3 {
     font-family: "Fraunces", Georgia, serif !important;
     letter-spacing: 0.2px;
-    color: #1f3230;
+    color: #1a2f2e !important;
+    font-weight: 700 !important;
+}
+
+/* Consistent icon styling */
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+[data-testid="stSidebar"] .stMarkdown h1,
+[data-testid="stSidebar"] .stMarkdown h2,
+[data-testid="stSidebar"] .stMarkdown h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Icon styling for better accessibility */
+.stMarkdown h1 span:first-child,
+.stMarkdown h2 span:first-child,
+.stMarkdown h3 span:first-child {
+    font-size: 1.2em;
+    display: inline-block;
+    margin-right: 0.3rem;
 }
 
 h1 { font-size: 2.1rem !important; }
@@ -136,16 +189,27 @@ p, li, label, .stMarkdown, .stAlert, .stCaption {
 
 div[data-testid="stMetric"] {
     background: var(--panel);
-    border: 1px solid var(--line);
+    border: 2px solid var(--line);
     border-radius: 14px;
     padding: 0.75rem 0.85rem;
     box-shadow: var(--shadow);
+    transition: all 0.2s ease;
+}
+
+div[data-testid="stMetric"]:hover {
+    border-color: #0d6b64;
+    box-shadow: 0 12px 32px rgba(13, 107, 100, 0.15);
 }
 
 [data-testid="stMetricValue"] {
     font-size: 1.45rem !important;
     font-weight: 700 !important;
-    color: #184946;
+    color: #0f6f68 !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: #3d5354 !important;
+    font-weight: 600 !important;
 }
 
 div[data-testid="stExpander"] {
@@ -153,27 +217,77 @@ div[data-testid="stExpander"] {
     border-radius: 12px;
     background: var(--panel);
     box-shadow: 0 8px 22px rgba(30, 56, 55, 0.06);
+    transition: all 0.2s ease;
+}
+
+div[data-testid="stExpander"]:hover {
+    border-color: #0d6b64;
+    box-shadow: 0 8px 24px rgba(13, 107, 100, 0.12);
 }
 
 div[data-testid="stExpander"] > details summary {
     font-weight: 600;
+    cursor: pointer;
+    padding: 0.75rem;
+    transition: background-color 0.2s ease;
+    color: #1a2f2e;
+}
+
+div[data-testid="stExpander"] > details summary:hover {
+    background-color: #f0f5f4;
+}
+
+div[data-testid="stExpander"] > details summary:focus {
+    outline: 2px solid #0d6b64;
+    outline-offset: -2px;
+}
+
+div[data-testid="stExpander"] > details[open] {
+    border-color: #0d6b64;
 }
 
 .stButton > button,
 .stDownloadButton > button {
     border-radius: 10px;
-    border: 1px solid #9dc9c4;
+    border: 2px solid #0f6f68;
     background: linear-gradient(180deg, #1f8a82 0%, #0f6f68 100%);
     color: #ffffff;
     font-weight: 700;
     box-shadow: 0 8px 18px rgba(17, 91, 85, 0.25);
-    transition: transform 0.16s ease, box-shadow 0.16s ease;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
 }
 
 .stButton > button:hover,
 .stDownloadButton > button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 22px rgba(17, 91, 85, 0.30);
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(17, 91, 85, 0.35);
+    background: linear-gradient(180deg, #2a9a94 0%, #1a7f78 100%);
+    border-color: #0a5a54;
+}
+
+.stButton > button:focus,
+.stDownloadButton > button:focus {
+    outline: 3px solid #0d6b64;
+    outline-offset: 2px;
+}
+
+.stButton > button:active,
+.stDownloadButton > button:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(17, 91, 85, 0.2);
+}
+
+.stButton > button:disabled,
+.stDownloadButton > button:disabled {
+    background: linear-gradient(180deg, #b0b0b0 0%, #8a8a8a 100%);
+    color: #ffffff;
+    border-color: #707070;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
 }
 
 .stSelectbox, .stMultiSelect, .stSlider, .stRadio, .stCheckbox, .stNumberInput {
@@ -182,10 +296,70 @@ div[data-testid="stExpander"] > details summary {
     padding: 0.1rem 0.35rem;
 }
 
+/* Improved form element focus states for accessibility */
+.stSelectbox > div > div > div,
+.stMultiSelect > div > div > div,
+.stNumberInput input {
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.stSelectbox > div > div > div:focus,
+.stMultiSelect > div > div > div:focus,
+.stNumberInput input:focus {
+    border-color: #0d6b64 !important;
+    box-shadow: 0 0 0 3px rgba(13, 107, 100, 0.1) !important;
+}
+
+/* Checkbox and Radio button improvements */
+.stCheckbox > label,
+.stRadio > label {
+    cursor: pointer;
+    font-weight: 500;
+    color: #223233;
+    transition: color 0.2s ease;
+}
+
+.stCheckbox > label:hover,
+.stRadio > label:hover {
+    color: #0d6b64;
+}
+
+.stCheckbox > label > span:first-child,
+.stRadio > label > span:first-child {
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+/* Better contrast for labels */
+label, .stLabel {
+    color: #1a2f2e !important;
+    font-weight: 600 !important;
+}
+
 [data-testid="stDataFrame"] {
     border: 1px solid var(--line);
     border-radius: 12px;
     overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Table styling for better readability */
+table {
+    color: #1a2f2e !important;
+}
+
+table th {
+    background-color: #f0f5f4 !important;
+    color: #1a2f2e !important;
+    font-weight: 700 !important;
+}
+
+table td {
+    color: #3d5354 !important;
+}
+
+table tr:hover td {
+    background-color: #fafcfb !important;
 }
 
 .hero-card {
