@@ -191,9 +191,38 @@ def plot_cross_section(
         available_curves.update(well["df"].columns)
     
     curves_to_plot_filtered = [c for c in curves_to_plot if c in available_curves]
+    
+    # Further filter: Remove curves that are entirely empty (all NaN) across all wells in the depth range
+    curves_with_data = []
+    depth_col_name = None
+    
+    for curve in curves_to_plot_filtered:
+        has_valid_data = False
+        
+        for well in wells.values():
+            df = well["df"]
+            depth_col = df.columns[0]
+            if depth_col_name is None:
+                depth_col_name = depth_col
+            
+            # Mask to depth window
+            mask = (df[depth_col] >= depth_min) & (df[depth_col] <= depth_max)
+            
+            if curve in df.columns:
+                data_in_range = df[mask][curve]
+                # Check if there's any valid (non-NaN) data
+                if data_in_range.notna().any():
+                    has_valid_data = True
+                    break
+        
+        if has_valid_data:
+            curves_with_data.append(curve)
+    
+    curves_to_plot_filtered = curves_with_data
+    
     if not curves_to_plot_filtered:
         fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No curves available in selected wells", ha="center", va="center")
+        ax.text(0.5, 0.5, "No curves with valid data in selected depth range", ha="center", va="center")
         return fig
     
     n_curves = len(curves_to_plot_filtered)
