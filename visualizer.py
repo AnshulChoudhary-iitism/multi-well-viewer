@@ -423,8 +423,11 @@ def plot_cross_section(
             if ci == 0:
                 ax.set_xlabel(well_name, fontsize=track_title_fs, labelpad=4)
 
-    # Set depth range for all axes in increasing mode
-    axes[0].set_ylim(depth_min, depth_max)
+    # Set depth range for all axes
+    # Invert Y-axis so depth increases downward (standard geophysical convention)
+    axes[0].set_ylim(depth_max, depth_min)
+    for ax in axes:
+        ax.invert_yaxis()
 
     # Optional cross-well connector lines for selected/common formation tops.
     if show_connectors and n_wells > 1 and marker_depths_by_well:
