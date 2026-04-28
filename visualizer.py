@@ -845,7 +845,7 @@ def plot_merged_well_gr(
     info = well["info"]
     
     # Find GR curve
-    gr_curve = _find_gr_curve(well["curves"])
+    gr_curve = _find_gr_curve(df)
     
     # Get theme
     theme = THEME_PRESETS.get(theme_preset, THEME_PRESETS["Geo Light"])
