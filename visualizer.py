@@ -806,3 +806,97 @@ def plot_well_correlation(
     return fig
 
 
+# ---------------------------------------------------------------------------
+# Merged well visualization
+# ---------------------------------------------------------------------------
+
+def plot_merged_well_gr(
+    well: dict,
+    figsize: tuple[float, float] = (8, 10),
+    title: str = None,
+    theme_preset: str = "Geo Light",
+) -> plt.Figure:
+    """Create a dedicated plot for merged well showing depth vs GR values.
+    
+    Parameters
+    ----------
+    well : dict
+        Well data dict containing 'depth', 'df', 'curves', and 'info' keys.
+    figsize : tuple
+        Figure size (width, height) in inches.
+    title : str or None
+        Plot title. If None, uses well name from well['info'].
+    theme_preset : str
+        Theme preset name (e.g., "Geo Light").
+    
+    Returns
+    -------
+    plt.Figure
+        Matplotlib figure object.
+    """
+    
+    # Get well information
+    well_name = well.get("name", "Merged Well")
+    if title is None:
+        title = f"Merged Well Log: {well_name}"
+    
+    depth = well["depth"]
+    df = well["df"]
+    info = well["info"]
+    
+    # Find GR curve
+    gr_curve = _find_gr_curve(well["curves"])
+    
+    # Get theme
+    theme = THEME_PRESETS.get(theme_preset, THEME_PRESETS["Geo Light"])
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize, facecolor=theme["facecolor"])
+    ax.set_facecolor(theme["facecolor"])
+    
+    # Plot GR curve
+    if gr_curve and gr_curve in df.columns:
+        gr_data = df[gr_curve]
+        
+        # Get style for GR
+        style = CURVE_STYLES.get("GR", _DEFAULT_STYLE)
+        color = style.get("color", "#4caf50")
+        lw = style.get("lw", 1.2)
+        
+        # Plot line
+        ax.plot(gr_data, depth, color=color, linewidth=lw, label="GR", zorder=2)
+        
+        # Add fill under curve if specified
+        if style.get("fill", False):
+            ax.fill_betweenx(depth, 0, gr_data, alpha=style.get("fill_alpha", 0.15), 
+                            color=color, zorder=1)
+    
+    # Set labels and title
+    ax.set_xlabel("Gamma Ray (GR)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Depth (m)", fontsize=12, fontweight="bold")
+    ax.set_title(title, fontsize=14, fontweight="bold", pad=20)
+    
+    # Invert Y-axis so depth increases downward
+    ax.invert_yaxis()
+    
+    # Add grid
+    ax.grid(True, which="major", color=theme.get("grid_major", "#c9d5d2"), 
+            linewidth=0.5, alpha=0.7)
+    ax.grid(True, which="minor", color=theme.get("grid_minor", "#e6edeb"), 
+            linewidth=0.3, alpha=0.4, linestyle=":")
+    
+    # Add well info as text
+    info_text = (
+        f"Well: {well_name}\n"
+        f"Depth range: {info.get('strt', 0):.1f} - {info.get('stop', 0):.1f} m\n"
+        f"Step: {info.get('step', 0):.3f} m"
+    )
+    ax.text(0.02, 0.98, info_text, transform=ax.transAxes, 
+            fontsize=9, verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor=theme.get("panel_soft", "#f4f7f6"), 
+                     edgecolor=theme.get("line", "#d5dfdc"), alpha=0.8))
+    
+    plt.tight_layout()
+    return fig
+
+

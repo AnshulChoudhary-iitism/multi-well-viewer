@@ -30,7 +30,7 @@ from flattening import (
 )
 from merge_logs import merge_well_logs
 from export_las import export_well_to_las, export_well_to_csv
-from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation
+from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation, plot_merged_well_gr
 from report_generator import generate_pdf_report
 
 # ---------------------------------------------------------------------------
@@ -1257,6 +1257,16 @@ with tabs[1]:
                     hide_index=True,
                 )
                 
+                # Visualization for merged wells
+                if info.get("merged"):
+                    st.markdown("---")
+                    st.markdown("**📊 Merged Well Visualization:**")
+                    
+                    # Display merged well plot with depth and GR values
+                    fig = plot_merged_well_gr(well, figsize=(10, 8))
+                    st.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
+                    
                 # Export buttons for merged wells
                 if info.get("merged"):
                     st.markdown("---")
