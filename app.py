@@ -696,6 +696,14 @@ with st.sidebar:
                         f"✅ Merged: **{well_a}** + **{well_b}** → **{merged_name}**"
                     )
                     
+                    # Display merged well GR plot immediately
+                    st.markdown("---")
+                    st.subheader("📊 Merged Well Visualization")
+                    fig = plot_merged_well_gr(merged_well, figsize=(10, 8))
+                    st.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
+                    st.markdown("---")
+                    
                     # Show merged curves info
                     well_a_curves = st.session_state.wells[well_a]["curves"]
                     well_b_curves = st.session_state.wells[well_b]["curves"]
