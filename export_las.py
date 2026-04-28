@@ -48,12 +48,29 @@ def export_well_to_las(well: dict) -> bytes:
         if depth_col != "DEPTH":
             df = df.rename(columns={depth_col: "DEPTH"})
         
-        # Create curves from dataframe columns
+        # Process each curve column
         for col in df.columns:
             if col == "DEPTH":
                 continue
             
-            values = df[col].values
+            # For merged wells with NaN values, use interpolation and forward/backward fill
+            # This maintains data continuity for merged well logs
+            values = df[col].copy()
+            
+            # Use pandas Series for better handling
+            series = pd.Series(values)
+            
+            # First interpolate linearly to fill small gaps
+            series = series.interpolate(method='linear', limit_direction='both')
+            
+            # Then forward and backward fill remaining NaN values
+            series = series.fillna(method='ffill').fillna(method='bfill')
+            
+            # For any remaining NaN at edges, fill with 0 or the nearest value
+            series = series.fillna(0)
+            
+            values = series.values
+            
             unit = well.get("units", {}).get(col, "")
             
             # Create curve

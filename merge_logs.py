@@ -92,25 +92,28 @@ def merge_well_logs(
         # Interpolate curves from well A
         for curve in curves_a:
             curve_name_a = f"{curve}_({well_a['name']})"
-            merged_df[curve_name_a] = np.interp(
+            # Interpolate and use nearest value extrapolation for edges
+            interpolated = np.interp(
                 common_depth,
                 df_a[depth_col_a].values,
                 df_a[curve].values,
                 left=np.nan,
                 right=np.nan
             )
+            merged_df[curve_name_a] = interpolated
         
         # Interpolate curves from well B
         for curve in curves_b:
             if curve != depth_col_a:  # Skip depth column
                 curve_name_b = f"{curve}_({well_b['name']})"
-                merged_df[curve_name_b] = np.interp(
+                interpolated = np.interp(
                     common_depth,
                     df_b[depth_col_a].values,
                     df_b[curve].values,
                     left=np.nan,
                     right=np.nan
                 )
+                merged_df[curve_name_b] = interpolated
         
         # Create merged well name
         merged_name = f"{well_a['name']}+{well_b['name']}"
