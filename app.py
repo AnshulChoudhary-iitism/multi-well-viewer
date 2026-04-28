@@ -1201,14 +1201,14 @@ with tabs[1]:
             with st.expander(f"**{wname}**", expanded=False):
                 info = well["info"]
                 col1, col2, col3 = st.columns(3)
-                col1.metric("Top depth", f"{info['strt']:.1f} m")
-                col2.metric("Base depth", f"{info['stop']:.1f} m")
-                col3.metric("Step", f"{info['step']:.3f} m")
+                col1.metric("Top depth", f"{info.get('strt', 0):.1f} m")
+                col2.metric("Base depth", f"{info.get('stop', 0):.1f} m")
+                col3.metric("Step", f"{info.get('step', 0):.3f} m")
 
                 meta_cols = st.columns(3)
-                meta_cols[0].markdown(f"**Company:** {info['company'] or '—'}")
-                meta_cols[1].markdown(f"**Field:** {info['field'] or '—'}")
-                meta_cols[2].markdown(f"**KB:** {info['kb']} m")
+                meta_cols[0].markdown(f"**Company:** {info.get('company') or '—'}")
+                meta_cols[1].markdown(f"**Field:** {info.get('field') or '—'}")
+                meta_cols[2].markdown(f"**KB:** {info.get('kb', 0)} m")
 
                 st.markdown("**Available curves:**")
                 curve_info = []

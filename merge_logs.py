@@ -114,6 +114,19 @@ def merge_well_logs(
         # Get all curves
         all_curves = [c for c in merged_df.columns if c != depth_col_a]
         
+        # Create complete info dictionary
+        merged_info = {
+            "well": merged_name,
+            "field": well_a["info"].get("field", "") or well_b["info"].get("field", ""),
+            "company": well_a["info"].get("company", "") or well_b["info"].get("company", ""),
+            "kb": max(well_a["info"].get("kb", 0), well_b["info"].get("kb", 0)),
+            "strt": float(depth_min),
+            "stop": float(depth_max),
+            "step": float(depth_step),
+            "merged": True,
+            "parent_wells": (well_a["name"], well_b["name"]),
+        }
+        
         return {
             "name": merged_name,
             "df": merged_df,
@@ -123,7 +136,7 @@ def merge_well_logs(
             "alignment_formation": alignment_formation,
             "alignment_depth_offset": depth_offset,
             "units": {},
-            "info": {"merged": True},
+            "info": merged_info,
         }
     
     except Exception as e:
