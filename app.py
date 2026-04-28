@@ -29,6 +29,7 @@ from flattening import (
     get_flattened_depth_range,
 )
 from merge_logs import merge_well_logs
+from export_las import export_well_to_las, export_well_to_csv
 from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation
 from report_generator import generate_pdf_report
 
@@ -1229,6 +1230,32 @@ with tabs[1]:
                     use_container_width=True,
                     hide_index=True,
                 )
+                
+                # Export buttons for merged wells
+                if info.get("merged"):
+                    st.markdown("---")
+                    st.markdown("**Export Merged Well:**")
+                    exp_col1, exp_col2 = st.columns(2)
+                    
+                    with exp_col1:
+                        las_bytes = export_well_to_las(well)
+                        st.download_button(
+                            label="📥 Download as LAS",
+                            data=las_bytes,
+                            file_name=f"{wname}.las",
+                            mime="application/octet-stream",
+                            key=f"export_las_{wname}"
+                        )
+                    
+                    with exp_col2:
+                        csv_bytes = export_well_to_csv(well)
+                        st.download_button(
+                            label="📥 Download as CSV",
+                            data=csv_bytes,
+                            file_name=f"{wname}.csv",
+                            mime="text/csv",
+                            key=f"export_csv_{wname}"
+                        )
 
     if st.session_state.formation_tops is not None:
         st.markdown("---")
