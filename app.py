@@ -695,6 +695,20 @@ with st.sidebar:
                     st.success(
                         f"✅ Merged: **{well_a}** + **{well_b}** → **{merged_name}**"
                     )
+                    
+                    # Show merged curves info
+                    well_a_curves = st.session_state.wells[well_a]["curves"]
+                    well_b_curves = st.session_state.wells[well_b]["curves"]
+                    
+                    with st.expander("📊 Merged curves summary", expanded=False):
+                        col_info1, col_info2 = st.columns(2)
+                        with col_info1:
+                            st.markdown(f"**From {well_a}:**")
+                            st.caption(f"{', '.join(well_a_curves)}")
+                        with col_info2:
+                            st.markdown(f"**From {well_b}:**")
+                            st.caption(f"{', '.join(well_b_curves)}")
+                    
                     if alignment_formation:
                         st.info(
                             f"Aligned on formation: **{alignment_formation}** "
@@ -780,6 +794,18 @@ with st.sidebar:
     # Curves are now normalized at load time (GR/HCGR → GR, RHOB variants → RHOB, etc.)
     preferred_order = ["GR", "NPHI", "RHOB"]
     default_curves = [c for c in preferred_order if c in available_track_options]
+
+    # Add curves from merged wells (format: "CURVE_(WELL_NAME)")
+    # Look for merged well curves and add them if the base curve is in preferred_order
+    has_merged_wells = any(w["info"].get("merged") for w in st.session_state.wells.values())
+    if has_merged_wells:
+        for c in available_track_options:
+            # Check if this is a merged well curve (has parentheses)
+            if "(" in c and ")" in c:
+                # Extract base curve name (everything before the first parenthesis)
+                base_curve = c.split("(")[0].strip()
+                if base_curve in preferred_order and c not in default_curves:
+                    default_curves.append(c)
 
     # Backfill if fewer than 3 were found
     if len(default_curves) < 3:

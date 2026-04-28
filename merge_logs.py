@@ -85,28 +85,32 @@ def merge_well_logs(
         # Merge dataframes on depth
         merged_df = pd.DataFrame({depth_col_a: common_depth})
         
-        # Interpolate curves from both wells onto common depth grid
-        for curve in df_a.columns:
-            if curve != depth_col_a:
-                merged_df[f"{curve}_A"] = np.interp(
+        # Get all curves from both wells with suffixes to track origin
+        curves_a = [c for c in df_a.columns if c != depth_col_a]
+        curves_b = [c for c in df_b.columns if c != depth_col_b]
+        
+        # Interpolate curves from well A
+        for curve in curves_a:
+            curve_name_a = f"{curve}_({well_a['name']})"
+            merged_df[curve_name_a] = np.interp(
+                common_depth,
+                df_a[depth_col_a].values,
+                df_a[curve].values,
+                left=np.nan,
+                right=np.nan
+            )
+        
+        # Interpolate curves from well B
+        for curve in curves_b:
+            if curve != depth_col_a:  # Skip depth column
+                curve_name_b = f"{curve}_({well_b['name']})"
+                merged_df[curve_name_b] = np.interp(
                     common_depth,
-                    df_a[depth_col_a].values,
-                    df_a[curve].values,
+                    df_b[depth_col_a].values,
+                    df_b[curve].values,
                     left=np.nan,
                     right=np.nan
                 )
-        
-        for curve in df_b.columns:
-            if curve != depth_col_a:
-                # Avoid duplicate depth column
-                if curve != depth_col_a:
-                    merged_df[f"{curve}_B"] = np.interp(
-                        common_depth,
-                        df_b[depth_col_a].values,
-                        df_b[curve].values,
-                        left=np.nan,
-                        right=np.nan
-                    )
         
         # Create merged well name
         merged_name = f"{well_a['name']}+{well_b['name']}"
