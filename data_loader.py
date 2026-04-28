@@ -26,6 +26,58 @@ def _read_uploaded_bytes(uploaded_file) -> bytes:
     return bytes(data) if isinstance(data, (bytes, bytearray)) else b""
 
 
+def _normalize_curve_names(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str]]:
+    """Normalize curve names by grouping similar ones.
+    
+    Maps GR variants (GR, HCGR, CGR, etc.) to a single 'GR' column.
+    Similarly for other curves.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with curve column names
+    
+    Returns
+    -------
+    tuple
+        - Normalized DataFrame
+        - Mapping dict of original_name -> normalized_name
+    """
+    mapping = {}
+    new_df = df.copy()
+    
+    # Define curve groupings (what names should be treated as the same curve)
+    curve_groups = {
+        "GR": ["GR", "HCGR", "CGR", "GR_CORR", "GRT"],
+        "RHOB": ["RHOB", "RHOB_CORR", "RHOS"],
+        "NPHI": ["NPHI", "PHI", "PHIT", "PHIE_LOG"],
+        "ILD": ["ILD", "RILD", "R_ILD"],
+        "LLD": ["LLD", "RLLD", "R_LLD"],
+        "RT": ["RT", "RES", "RESIST"],
+        "DT": ["DT", "DTL", "DTCO"],
+        "PHIE": ["PHIE", "PHI_E"],
+        "SW": ["SW", "SHW", "SWAT"],
+        "VSH": ["VSH", "VCL", "VSHALE"],
+    }
+    
+    # Build reverse mapping
+    for canonical_name, variants in curve_groups.items():
+        for col in new_df.columns:
+            col_upper = col.upper()
+            for variant in variants:
+                if col_upper == variant or col_upper == variant.upper():
+                    if col != canonical_name:  # Only rename if different
+                        mapping[col] = canonical_name
+                    break
+    
+    # Apply the renaming
+    if mapping:
+        new_df = new_df.rename(columns=mapping)
+    
+    return new_df, mapping
+
+
+
 # ---------------------------------------------------------------------------
 # LAS file loading
 # ---------------------------------------------------------------------------
@@ -70,6 +122,9 @@ def load_las_file(uploaded_file) -> Optional[dict]:
     df.index.name = "DEPTH"
     df.reset_index(inplace=True)
 
+    # Normalize curve names (GR/HCGR/CGR → GR, etc.)
+    df, curve_mapping = _normalize_curve_names(df)
+
     # Well name from header or filename
     well_name = _extract_well_name(las, uploaded_file.name)
 
@@ -77,7 +132,12 @@ def load_las_file(uploaded_file) -> Optional[dict]:
     depth_array = df[depth_col].values
     curve_mnemonics = [c for c in df.columns if c != depth_col]
 
-    units = {c.mnemonic: c.unit for c in las.curves if c.mnemonic != depth_col}
+    # Build units dict, applying curve name normalization
+    units = {}
+    for c in las.curves:
+        if c.mnemonic != depth_col:
+            normalized_name = curve_mapping.get(c.mnemonic, c.mnemonic)
+            units[normalized_name] = c.unit
 
     info = {
         "well": str(las.well.get("WELL", {}).value if las.well.get("WELL") else ""),

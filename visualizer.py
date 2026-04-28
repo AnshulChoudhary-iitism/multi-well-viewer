@@ -79,6 +79,31 @@ def _normalize_well_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(name).strip().lower())
 
 
+def _find_gr_curve(df: pd.DataFrame) -> Optional[str]:
+    """Find a GR-like curve in the dataframe columns.
+    
+    Searches for variations like 'GR', 'HCGR', 'CGR', 'GR_CORR', etc.
+    Returns the first matching column name, or None if not found.
+    """
+    columns_upper = {col: col.upper() for col in df.columns}
+    
+    # Priority order: exact match first, then contains patterns
+    gr_patterns = ["GR", "HCGR", "CGR"]
+    
+    for pattern in gr_patterns:
+        for col, col_upper in columns_upper.items():
+            if col_upper == pattern:
+                return col
+    
+    # If no exact match, look for columns containing these patterns
+    for pattern in gr_patterns:
+        for col, col_upper in columns_upper.items():
+            if pattern in col_upper:
+                return col
+    
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Main cross-section builder
 # ---------------------------------------------------------------------------
@@ -160,6 +185,18 @@ def plot_cross_section(
         ax.text(0.5, 0.5, "No data to display", ha="center", va="center")
         return fig
 
+    # Filter curves to only those that exist in at least one well
+    available_curves = set()
+    for well in wells.values():
+        available_curves.update(well["df"].columns)
+    
+    curves_to_plot_filtered = [c for c in curves_to_plot if c in available_curves]
+    if not curves_to_plot_filtered:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No curves available in selected wells", ha="center", va="center")
+        return fig
+    
+    n_curves = len(curves_to_plot_filtered)
     n_cols = n_wells * n_curves
     fig_w = figsize_per_well[0] * n_cols
     fig_h = figsize_per_well[1]
@@ -232,7 +269,7 @@ def plot_cross_section(
                         if y1 > y0:
                             shade_intervals.append((y0, y1, str(top_rows[idx]["color"])))
 
-        for ci, curve in enumerate(curves_to_plot):
+        for ci, curve in enumerate(curves_to_plot_filtered):
             col_idx = wi * n_curves + ci
             ax = axes[col_idx]
 
@@ -345,7 +382,6 @@ def plot_cross_section(
             
             ax.tick_params(axis="x", labelsize=tick_fs, rotation=45)
             ax.tick_params(axis="y", labelsize=tick_fs)
-            ax.invert_yaxis()
 
             if track_separators and ci == 0 and wi > 0:
                 ax.spines["left"].set_visible(True)
@@ -357,6 +393,9 @@ def plot_cross_section(
 
             if ci == 0:
                 ax.set_xlabel(well_name, fontsize=track_title_fs, labelpad=4)
+
+    # Set depth range for all axes in increasing mode
+    axes[0].set_ylim(depth_min, depth_max)
 
     # Optional cross-well connector lines for selected/common formation tops.
     if show_connectors and n_wells > 1 and marker_depths_by_well:
@@ -639,8 +678,9 @@ def plot_well_correlation(
                     )
 
         # Optional: overlay thin GR curve as reference
-        if show_gr_curve and "GR" in df.columns:
-            gr_vals = df_win["GR"].values
+        gr_col = _find_gr_curve(df_win)
+        if show_gr_curve and gr_col is not None:
+            gr_vals = df_win[gr_col].values
             if len(gr_vals) > 0 and not np.isnan(gr_vals).all():
                 depth_vals = df_win[depth_col].values
                 # Normalize GR to 0-1 for positioning
@@ -661,7 +701,7 @@ def plot_well_correlation(
 
         # Axis decoration
         ax.set_xlim(0, 1)
-        ax.set_ylim(depth_max, depth_min)  # Inverted depth axis
+        ax.set_ylim(depth_min, depth_max)  # Depth in increasing mode (top to bottom)
         ax.set_xlabel(well_name, fontsize=well_label_fs, fontweight="bold", labelpad=6)
         ax.tick_params(axis="x", labelbottom=False)
         ax.tick_params(axis="y", labelsize=tick_fs)

@@ -28,6 +28,7 @@ from flattening import (
     flatten_wells,
     get_flattened_depth_range,
 )
+from merge_logs import merge_well_logs
 from visualizer import plot_cross_section, plot_curve_histogram, plot_well_correlation
 from report_generator import generate_pdf_report
 
@@ -637,6 +638,71 @@ with st.sidebar:
             del st.session_state.wells[wname]
             st.rerun()
 
+    # ── Merge logs technique ────────────────────────────────────────────────
+    if len(st.session_state.wells) >= 2:
+        st.markdown("---")
+        st.header("🔗 Merge Logs")
+        st.caption("Combine curves from two wells using formation tops alignment.")
+        
+        well_names = list(st.session_state.wells.keys())
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            well_a = st.selectbox(
+                "Well 1",
+                options=well_names,
+                index=0,
+                key="merge_well_a"
+            )
+        with col2:
+            # Filter out well_a from well_b options
+            well_b_options = [w for w in well_names if w != well_a]
+            if well_b_options:
+                well_b = st.selectbox(
+                    "Well 2",
+                    options=well_b_options,
+                    index=0,
+                    key="merge_well_b"
+                )
+            else:
+                st.warning("Need at least 2 different wells to merge")
+                well_b = None
+        
+        if well_b is not None:
+            alignment_formation = None
+            if st.session_state.formation_tops is not None and not st.session_state.formation_tops.empty:
+                formations = sorted(st.session_state.formation_tops["formation"].unique())
+                alignment_formation = st.selectbox(
+                    "Alignment formation",
+                    options=[None] + list(formations),
+                    format_func=lambda x: "No alignment (depth merge)" if x is None else x,
+                    key="merge_alignment"
+                )
+            
+            if st.button("🔗 Merge Wells", key="merge_button"):
+                merged_well = merge_well_logs(
+                    st.session_state.wells[well_a],
+                    st.session_state.wells[well_b],
+                    formation_tops=st.session_state.formation_tops,
+                    alignment_formation=alignment_formation,
+                )
+                
+                if merged_well is not None:
+                    # Add merged well to session state
+                    merged_name = merged_well["name"]
+                    st.session_state.wells[merged_name] = merged_well
+                    st.success(
+                        f"✅ Merged: **{well_a}** + **{well_b}** → **{merged_name}**"
+                    )
+                    if alignment_formation:
+                        st.info(
+                            f"Aligned on formation: **{alignment_formation}** "
+                            f"(depth offset: {merged_well['alignment_depth_offset']:.2f} m)"
+                        )
+                    st.rerun()
+                else:
+                    st.error("Failed to merge wells. Check data compatibility.")
+
     # ── Formation tops upload ─────────────────────────────────────────────
     st.markdown("---")
     st.header("🗺️ Formation Tops")
@@ -709,23 +775,17 @@ with st.sidebar:
         all_curves if track_pool_mode == "All available tracks" else common_curves
     )
 
-    # Use a focused default set (4-5 tracks) so the data visualization remains readable.
-    preferred_order = ["GR", "ILD", "LLD", "RT", "RHOB", "NPHI", "DT"]
-    default_curves = [c for c in preferred_order if c in available_track_options][:5]
+    # Use a focused default set (GR, NPHI, RHOB) for clarity and readability
+    # Curves are now normalized at load time (GR/HCGR → GR, RHOB variants → RHOB, etc.)
+    preferred_order = ["GR", "NPHI", "RHOB"]
+    default_curves = [c for c in preferred_order if c in available_track_options]
 
-    # Backfill from the active track pool, if fewer than 4 were found.
-    if len(default_curves) < 4:
+    # Backfill if fewer than 3 were found
+    if len(default_curves) < 3:
         for c in available_track_options:
             if c not in default_curves:
                 default_curves.append(c)
-            if len(default_curves) >= 5:
-                break
-
-    if len(default_curves) < 4:
-        for c in available_track_options:
-            if c not in default_curves:
-                default_curves.append(c)
-            if len(default_curves) >= min(5, len(available_track_options)):
+            if len(default_curves) >= 3:
                 break
 
     selected_curves = st.multiselect(
