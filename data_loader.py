@@ -48,16 +48,16 @@ def _normalize_curve_names(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, st
     
     # Define curve groupings (what names should be treated as the same curve)
     curve_groups = {
-        "GR": ["GR", "HCGR", "CGR", "GR_CORR", "GRT"],
-        "RHOB": ["RHOB", "RHOB_CORR", "RHOS"],
-        "NPHI": ["NPHI", "PHI", "PHIT", "PHIE_LOG"],
-        "ILD": ["ILD", "RILD", "R_ILD"],
-        "LLD": ["LLD", "RLLD", "R_LLD"],
-        "RT": ["RT", "RES", "RESIST"],
-        "DT": ["DT", "DTL", "DTCO"],
-        "PHIE": ["PHIE", "PHI_E"],
-        "SW": ["SW", "SHW", "SWAT"],
-        "VSH": ["VSH", "VCL", "VSHALE"],
+        "GR": ["GR", "HCGR", "CGR", "GR_CORR", "GRT", "CGRT", "ECGR"],
+        "RHOB": ["RHOB", "RHOB_CORR", "RHOS", "RHOB_PRIMARY", "RHOB_CORRECTED", "DB", "DRHO", "RHOBC"],
+        "NPHI": ["NPHI", "PHI", "PHIT", "PHIE_LOG", "NPOR", "PHIN", "PHIND", "PORO", "POROSITY", "PHIE", "PHIC"],
+        "ILD": ["ILD", "RILD", "R_ILD", "ILD_CORR", "RILD_CORR"],
+        "LLD": ["LLD", "RLLD", "R_LLD", "LLD_CORR", "RLLD_CORR"],
+        "RT": ["RT", "RES", "RESIST", "DEEP_RES", "R_T"],
+        "DT": ["DT", "DTL", "DTCO", "DTC", "DTSM", "DTM"],
+        "PHIE": ["PHIE", "PHI_E", "PHIE_TOTAL", "PHI_EFFECTIVE"],
+        "SW": ["SW", "SHW", "SWAT", "WATER_SAT", "SW_CORE"],
+        "VSH": ["VSH", "VCL", "VSHALE", "VSHALE_TOTAL", "VOLUME_SHALE"],
     }
     
     # Build reverse mapping
