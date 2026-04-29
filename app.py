@@ -798,30 +798,13 @@ with st.sidebar:
         all_curves if track_pool_mode == "All available tracks" else common_curves
     )
 
-    # Use a focused default set (GR, NPHI, RHOB) for clarity and readability
+    # Use only GR as default for initial visualization
     # Curves are now normalized at load time (GR/HCGR → GR, RHOB variants → RHOB, etc.)
-    preferred_order = ["GR", "NPHI", "RHOB"]
+    preferred_order = ["GR"]
     default_curves = [c for c in preferred_order if c in available_track_options]
 
-    # Add curves from merged wells (format: "CURVE_(WELL_NAME)")
-    # Look for merged well curves and add them if the base curve is in preferred_order
-    has_merged_wells = any(w["info"].get("merged") for w in st.session_state.wells.values())
-    if has_merged_wells:
-        for c in available_track_options:
-            # Check if this is a merged well curve (has parentheses)
-            if "(" in c and ")" in c:
-                # Extract base curve name (everything before the first parenthesis)
-                base_curve = c.split("(")[0].strip()
-                if base_curve in preferred_order and c not in default_curves:
-                    default_curves.append(c)
-
-    # Backfill if fewer than 3 were found
-    if len(default_curves) < 3:
-        for c in available_track_options:
-            if c not in default_curves:
-                default_curves.append(c)
-            if len(default_curves) >= 3:
-                break
+    # If GR not available, don't backfill - let user select manually
+    # This keeps initial visualization clean with only GR log displayed
 
     selected_curves = st.multiselect(
         "Tracks to display",
