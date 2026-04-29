@@ -1336,7 +1336,10 @@ with tabs[2]:
         for wname, well in st.session_state.wells.items():
             df = well["df"]
             depth_col = df.columns[0]
-            mask = (df[depth_col] >= depth_range[0]) & (df[depth_col] <= depth_range[1])
+            # Create mask safely, handling NaN values
+            depth_values = pd.to_numeric(df[depth_col], errors='coerce')
+            mask = (depth_values >= depth_range[0]) & (depth_values <= depth_range[1])
+            mask = mask.fillna(False)  # Replace any NaN in mask with False
             df_win = df[mask]
 
             available = [c for c in selected_curves if c in df_win.columns]

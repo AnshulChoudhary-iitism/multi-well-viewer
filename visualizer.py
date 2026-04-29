@@ -206,14 +206,22 @@ def plot_cross_section(
                 depth_col_name = depth_col
             
             # Mask to depth window
-            mask = (df[depth_col] >= depth_min) & (df[depth_col] <= depth_max)
+            try:
+                depth_values = pd.to_numeric(df[depth_col], errors='coerce')
+                mask = (depth_values >= depth_min) & (depth_values <= depth_max)
+                mask = mask.fillna(False)  # Replace any NaN in mask with False
+            except Exception:
+                continue
             
             if curve in df.columns:
-                data_in_range = df[mask][curve]
-                # Check if there's any valid (non-NaN) data
-                if data_in_range.notna().any():
-                    has_valid_data = True
-                    break
+                try:
+                    data_in_range = df.loc[mask, curve]
+                    # Check if there's any valid (non-NaN) data
+                    if len(data_in_range) > 0 and data_in_range.notna().any():
+                        has_valid_data = True
+                        break
+                except Exception:
+                    continue
         
         if has_valid_data:
             curves_with_data.append(curve)
@@ -268,7 +276,10 @@ def plot_cross_section(
         depth_col = df.columns[0]
         well_key = _normalize_well_name(well_name)
 
-        mask = (df[depth_col] >= depth_min) & (df[depth_col] <= depth_max)
+        # Create mask safely, handling NaN values
+        depth_values = pd.to_numeric(df[depth_col], errors='coerce')
+        mask = (depth_values >= depth_min) & (depth_values <= depth_max)
+        mask = mask.fillna(False)  # Replace any NaN in mask with False
         df_win = df[mask]
 
         well_tops = pd.DataFrame()
@@ -623,8 +634,10 @@ def plot_well_correlation(
         depth_col = df.columns[0]
         well_key = _normalize_well_name(well_name)
 
-        # Mask to depth window
-        mask = (df[depth_col] >= depth_min) & (df[depth_col] <= depth_max)
+        # Mask to depth window (handle NaN values safely)
+        depth_values = pd.to_numeric(df[depth_col], errors='coerce')
+        mask = (depth_values >= depth_min) & (depth_values <= depth_max)
+        mask = mask.fillna(False)  # Replace any NaN in mask with False
         df_win = df[mask]
 
         # Set background
