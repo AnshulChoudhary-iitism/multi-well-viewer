@@ -1231,17 +1231,37 @@ with tabs[1]:
                 st.markdown("**Available curves:**")
                 curve_info = []
                 for curve in well["curves"]:
-                    col_data = well["df"][curve]
-                    curve_info.append(
-                        {
-                            "Curve": curve,
-                            "Unit": well["units"].get(curve, ""),
-                            "Min": f"{col_data.min():.3g}",
-                            "Max": f"{col_data.max():.3g}",
-                            "Mean": f"{col_data.mean():.3g}",
-                            "Null %": f"{col_data.isna().mean()*100:.1f}%",
-                        }
-                    )
+                    try:
+                        col_data = well["df"][curve]
+                        
+                        # Handle case where column selection returns DataFrame (duplicate columns)
+                        if isinstance(col_data, pd.DataFrame):
+                            col_data = col_data.iloc[:, 0]
+                        
+                        # Convert to numeric and calculate stats
+                        col_data = pd.to_numeric(col_data, errors='coerce')
+                        min_val = col_data.min()
+                        max_val = col_data.max()
+                        mean_val = col_data.mean()
+                        
+                        # Format values, handle NaN
+                        min_str = f"{float(min_val):.3g}" if not pd.isna(min_val) else "N/A"
+                        max_str = f"{float(max_val):.3g}" if not pd.isna(max_val) else "N/A"
+                        mean_str = f"{float(mean_val):.3g}" if not pd.isna(mean_val) else "N/A"
+                        
+                        curve_info.append(
+                            {
+                                "Curve": curve,
+                                "Unit": well["units"].get(curve, ""),
+                                "Min": min_str,
+                                "Max": max_str,
+                                "Mean": mean_str,
+                                "Null %": f"{col_data.isna().mean()*100:.1f}%",
+                            }
+                        )
+                    except Exception:
+                        # Skip curves with errors
+                        continue
                 st.dataframe(
                     pd.DataFrame(curve_info),
                     use_container_width=True,
